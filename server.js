@@ -222,7 +222,7 @@ bot.onText(/\/connect/, async (msg) => {
     });
 
   } catch (err) {
-    console.error('Error starting Twitter auth:', err);
+    console.error('Error starting Twitter authentication:', err);
     bot.sendMessage(chatId, '❌ Failed to start Twitter authentication. Please try again.');
   }
 });
