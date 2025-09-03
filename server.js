@@ -45,6 +45,7 @@ if (!DEEPSEEK_API_KEY) {
 }
 
 // ---------- Initialize Bot and AI ----------
+// Start with polling disabled, will enable if webhook fails
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 const deepseek = new OpenAI({
   apiKey: DEEPSEEK_API_KEY,
@@ -626,6 +627,16 @@ app.get('/auth/x/callback', async (req, res) => {
   }
 });
 
+// Simple test endpoint
+app.get('/test', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Server is responding',
+    timestamp: new Date().toISOString(),
+    bot: 'Active'
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   // Check if user wants HTML or JSON
@@ -670,16 +681,26 @@ app.post('/webhook', (req, res) => {
 // Set webhook on startup
 async function setupWebhook() {
   try {
-    const webhookUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}/webhook`
-      : process.env.X_CALLBACK_URL?.replace('/auth/x/callback', '/webhook') || `http://localhost:${PORT}/webhook`;
-    
-    console.log('🔗 Setting webhook URL:', webhookUrl);
-    
-    await bot.setWebHook(webhookUrl);
-    console.log('✅ Webhook set successfully');
+    // Only set webhook in production (Vercel)
+    if (process.env.NODE_ENV === 'production' && process.env.VERCEL_URL) {
+      const webhookUrl = `https://${process.env.VERCEL_URL}/webhook`;
+      
+      console.log('🔗 Setting webhook URL for production:', webhookUrl);
+      
+      const result = await bot.setWebHook(webhookUrl);
+      console.log('✅ Webhook set successfully:', result);
+    } else {
+      // For local development, use polling
+      console.log('🔄 Using polling mode for local development');
+      bot.startPolling();
+    }
   } catch (error) {
     console.error('❌ Failed to set webhook:', error);
+    console.error('❌ Error details:', error.message);
+    
+    // Fallback to polling
+    console.log('🔄 Falling back to polling mode');
+    bot.startPolling();
   }
 }
 
@@ -712,10 +733,15 @@ app.listen(PORT, async () => {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down server...');
   try {
-    await bot.deleteWebHook();
-    console.log('✅ Webhook deleted');
+    if (process.env.NODE_ENV === 'production') {
+      await bot.deleteWebHook();
+      console.log('✅ Webhook deleted');
+    } else {
+      bot.stopPolling();
+      console.log('✅ Polling stopped');
+    }
   } catch (error) {
-    console.error('❌ Error deleting webhook:', error);
+    console.error('❌ Error during shutdown:', error);
   }
   mongoose.connection.close();
   process.exit(0);
@@ -724,10 +750,15 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down server...');
   try {
-    await bot.deleteWebHook();
-    console.log('✅ Webhook deleted');
+    if (process.env.NODE_ENV === 'production') {
+      await bot.deleteWebHook();
+      console.log('✅ Webhook deleted');
+    } else {
+      bot.stopPolling();
+      console.log('✅ Polling stopped');
+    }
   } catch (error) {
-    console.error('❌ Error deleting webhook:', error);
+    console.error('❌ Error during shutdown:', error);
   }
   mongoose.connection.close();
   process.exit(0);
