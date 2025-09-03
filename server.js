@@ -209,6 +209,40 @@ app.post('/test-bot', async (req, res) => {
   }
 });
 
+// Set webhook URL manually
+app.post('/set-webhook', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ 
+        status: 'ERROR', 
+        message: 'URL is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    console.log('🔗 Manually setting webhook URL:', url);
+    const result = await botHandler.bot.setWebHook(url);
+    console.log('✅ Webhook set successfully:', result);
+    
+    res.json({ 
+      status: 'OK', 
+      message: 'Webhook URL set successfully',
+      url: url,
+      result: result,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Failed to set webhook:', error);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: 'Failed to set webhook',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   // Check if user wants HTML or JSON
@@ -256,8 +290,9 @@ module.exports = app;
 async function setupWebhook() {
   try {
     // Only set webhook in production (Vercel)
-    if (process.env.NODE_ENV === 'production' && process.env.VERCEL_URL) {
-      const webhookUrl = `https://${process.env.VERCEL_URL}/webhook`;
+    if (process.env.NODE_ENV === 'production') {
+      // Use the correct fixed webhook URL
+      const webhookUrl = 'https://the-tweater-theta.vercel.app/webhook';
       
       console.log('🔗 Setting webhook URL for production:', webhookUrl);
       
