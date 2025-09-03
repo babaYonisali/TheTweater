@@ -1,7 +1,7 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const TelegramBotHandler = require('./bot/TelegramBotHandler');
 const { loadTemplate } = require('./utils/templateLoader');
+const database = require('./config/database');
 require('dotenv').config();
 
 const app = express();
@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 // ---------- Config ----------
 const {
   MONGODB_URI,
+  MONGODB_DB_NAME = 'tweetbot', // Default database name
   TELEGRAM_BOT_TOKEN,
   X_CLIENT_ID,
   X_CLIENT_SECRET,
@@ -45,52 +46,7 @@ if (!DEEPSEEK_API_KEY) {
 const botHandler = new TelegramBotHandler();
 
 // ---------- MongoDB ----------
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 30000, // Increased timeout
-  socketTimeoutMS: 45000,
-  connectTimeoutMS: 30000, // Increased timeout
-  maxPoolSize: 10,
-  retryWrites: true,
-  w: 'majority',
-  bufferCommands: false, // Disable mongoose buffering
-  bufferMaxEntries: 0 // Disable mongoose buffering
-});
-
-const db = mongoose.connection;
-
-// Connection event handlers with retry logic
-db.on('error', (error) => {
-  console.error('❌ MongoDB connection error:', error);
-  // Don't exit on connection errors in production
-  if (process.env.NODE_ENV !== 'production') {
-    console.error('❌ Exiting due to MongoDB connection error in development');
-    process.exit(1);
-  }
-});
-
-db.on('connected', () => console.log('✅ Connected to MongoDB'));
-
-db.on('disconnected', () => {
-  console.log('❌ Disconnected from MongoDB');
-  // Attempt to reconnect after a delay
-  setTimeout(() => {
-    console.log('🔄 Attempting to reconnect to MongoDB...');
-    mongoose.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
-      connectTimeoutMS: 30000,
-      maxPoolSize: 10,
-      retryWrites: true,
-      w: 'majority'
-    });
-  }, 5000);
-});
-
-db.once('open', () => console.log('🚀 MongoDB connection established'));
+// Database connection will be handled by the Database class
 
 // ---------- Middleware ----------
 app.use(express.json());
@@ -162,8 +118,8 @@ app.get('/health', (req, res) => {
   
   if (acceptsHtml) {
     // Return stylized HTML page using template
-    const dbStatus = mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected';
-    const dbStatusClass = mongoose.connection.readyState === 1 ? 'status-ok' : 'status-error';
+    const dbStatus = database.isConnected() ? 'Connected' : 'Disconnected';
+    const dbStatusClass = database.isConnected() ? 'status-ok' : 'status-error';
     
     res.send(loadTemplate('health', {
       DB_STATUS: dbStatus,
@@ -178,7 +134,7 @@ app.get('/health', (req, res) => {
       timestamp: new Date().toISOString(),
       message: 'Twitter Bot server is running',
       bot: 'Active',
-      database: db.readyState === 1 ? 'Connected' : 'Disconnected',
+      database: database.isConnected() ? 'Connected' : 'Disconnected',
       port: PORT,
       uptime: process.uptime()
     });
@@ -237,7 +193,11 @@ async function initializeBot() {
 // ---------- Start Server and Bot ----------
 async function startServer() {
   try {
-    // Initialize bot handler first
+    // Connect to database first
+    console.log('🔧 Connecting to database...');
+    await database.connect();
+    
+    // Initialize bot handler
     await initializeBot();
     
     // Start the server
@@ -280,10 +240,10 @@ process.on('SIGINT', async () => {
       console.log('✅ Polling stopped');
     }
     await botHandler.stop();
+    await database.disconnect();
   } catch (error) {
     console.error('❌ Error during shutdown:', error);
   }
-  mongoose.connection.close();
   process.exit(0);
 });
 
@@ -298,9 +258,9 @@ process.on('SIGTERM', async () => {
       console.log('✅ Polling stopped');
     }
     await botHandler.stop();
+    await database.disconnect();
   } catch (error) {
     console.error('❌ Error during shutdown:', error);
   }
-  mongoose.connection.close();
   process.exit(0);
 });
