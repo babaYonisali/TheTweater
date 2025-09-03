@@ -48,16 +48,48 @@ const botHandler = new TelegramBotHandler();
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000,
+  serverSelectionTimeoutMS: 30000, // Increased timeout
   socketTimeoutMS: 45000,
-  connectTimeoutMS: 10000,
-  maxPoolSize: 10
+  connectTimeoutMS: 30000, // Increased timeout
+  maxPoolSize: 10,
+  retryWrites: true,
+  w: 'majority',
+  bufferCommands: false, // Disable mongoose buffering
+  bufferMaxEntries: 0 // Disable mongoose buffering
 });
 
 const db = mongoose.connection;
-db.on('error', (error) => console.error('❌ MongoDB connection error:', error));
+
+// Connection event handlers with retry logic
+db.on('error', (error) => {
+  console.error('❌ MongoDB connection error:', error);
+  // Don't exit on connection errors in production
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('❌ Exiting due to MongoDB connection error in development');
+    process.exit(1);
+  }
+});
+
 db.on('connected', () => console.log('✅ Connected to MongoDB'));
-db.on('disconnected', () => console.log('❌ Disconnected from MongoDB'));
+
+db.on('disconnected', () => {
+  console.log('❌ Disconnected from MongoDB');
+  // Attempt to reconnect after a delay
+  setTimeout(() => {
+    console.log('🔄 Attempting to reconnect to MongoDB...');
+    mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      maxPoolSize: 10,
+      retryWrites: true,
+      w: 'majority'
+    });
+  }, 5000);
+});
+
 db.once('open', () => console.log('🚀 MongoDB connection established'));
 
 // ---------- Middleware ----------

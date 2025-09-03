@@ -140,6 +140,22 @@ class TelegramBotHandler {
                 return;
             }
             
+            // Check database connection
+            const mongoose = require('mongoose');
+            if (mongoose.connection.readyState !== 1) {
+                console.error('❌ Database not connected, attempting to reconnect...');
+                await mongoose.connect(process.env.MONGODB_URI, {
+                    useNewUrlParser: true,
+                    useUnifiedTopology: true,
+                    serverSelectionTimeoutMS: 30000,
+                    socketTimeoutMS: 45000,
+                    connectTimeoutMS: 30000,
+                    maxPoolSize: 10,
+                    retryWrites: true,
+                    w: 'majority'
+                });
+            }
+            
             this.logUserMessage(msg, '/start');
             const chatId = msg.chat.id;
             
