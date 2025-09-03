@@ -15,20 +15,45 @@ class TelegramBotHandler {
 
     async init() {
         try {
-            // Create bot instance (no polling for Vercel)
-            this.bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
-            
-            // Initialize AI client
-            this.deepseek = new OpenAI({
-                apiKey: process.env.DEEPSEEK_API_KEY,
-                baseURL: 'https://api.deepseek.com'
+            console.log('🔧 Initializing Telegram bot...');
+            console.log('🔍 Environment check:', {
+                TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ? 'Present' : 'Missing',
+                DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? 'Present' : 'Missing',
+                X_CLIENT_ID: process.env.X_CLIENT_ID ? 'Present' : 'Missing',
+                X_CLIENT_SECRET: process.env.X_CLIENT_SECRET ? 'Present' : 'Missing',
+                NODE_ENV: process.env.NODE_ENV
             });
 
+            // Validate required environment variables
+            if (!process.env.TELEGRAM_BOT_TOKEN) {
+                throw new Error('TELEGRAM_BOT_TOKEN environment variable is required');
+            }
+
+            // Create bot instance (no polling for Vercel)
+            this.bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+            console.log('✅ Telegram bot instance created');
+            
+            // Initialize AI client
+            if (process.env.DEEPSEEK_API_KEY) {
+                this.deepseek = new OpenAI({
+                    apiKey: process.env.DEEPSEEK_API_KEY,
+                    baseURL: 'https://api.deepseek.com'
+                });
+                console.log('✅ DeepSeek AI client initialized');
+            } else {
+                console.warn('⚠️ DEEPSEEK_API_KEY not found, AI features disabled');
+            }
+
             // Initialize Twitter client
-            this.twitterClient = new TwitterApi({
-                clientId: process.env.X_CLIENT_ID,
-                clientSecret: process.env.X_CLIENT_SECRET,
-            });
+            if (process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET) {
+                this.twitterClient = new TwitterApi({
+                    clientId: process.env.X_CLIENT_ID,
+                    clientSecret: process.env.X_CLIENT_SECRET,
+                });
+                console.log('✅ Twitter client initialized');
+            } else {
+                console.warn('⚠️ Twitter credentials not found, Twitter features disabled');
+            }
             
             // Set up command handlers
             this.setupCommandHandlers();
@@ -37,9 +62,10 @@ class TelegramBotHandler {
             this.setupErrorHandling();
             
             this.isInitialized = true;
-            console.log('Telegram bot initialized successfully (webhook mode)');
+            console.log('✅ Telegram bot initialized successfully (webhook mode)');
         } catch (error) {
-            console.error('Error initializing Telegram bot:', error);
+            console.error('❌ Error initializing Telegram bot:', error);
+            this.isInitialized = false;
             throw error;
         }
     }
@@ -105,6 +131,12 @@ class TelegramBotHandler {
         try {
             if (!this.bot) {
                 console.error('❌ Bot not initialized in handleStartCommand');
+                console.error('❌ Bot state:', {
+                    isInitialized: this.isInitialized,
+                    botExists: !!this.bot,
+                    deepseekExists: !!this.deepseek,
+                    twitterClientExists: !!this.twitterClient
+                });
                 return;
             }
             

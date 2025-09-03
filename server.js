@@ -189,28 +189,51 @@ async function setupWebhook() {
   }
 }
 
+// ---------- Initialize Bot Handler First ----------
+async function initializeBot() {
+  try {
+    console.log('🔧 Initializing bot handler...');
+    await botHandler.init();
+    console.log('✅ Bot handler initialized successfully');
+  } catch (error) {
+    console.error('❌ Failed to initialize bot handler:', error);
+    process.exit(1);
+  }
+}
+
 // ---------- Start Server and Bot ----------
-app.listen(PORT, async () => {
-  console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
-  console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
-  
-  // Initialize bot handler
-  await botHandler.init();
-  
-  // Set up webhook
-  await setupWebhook();
-  
-  console.log('📱 Bot commands:');
-  console.log('   /start - Welcome message');
-  console.log('   /connect - Connect Twitter account');
-  console.log('   /post <text> - Post tweet');
-  console.log('   /state - Check connection status');
-  console.log('   /disconnect - Disconnect account');
-  console.log('   /help - Show help');
-  console.log('   /test - Test if bot is working');
-  console.log('🤖 AI Content Creator: Send any message for content creation help');
-  console.log('');
-});
+async function startServer() {
+  try {
+    // Initialize bot handler first
+    await initializeBot();
+    
+    // Start the server
+    app.listen(PORT, async () => {
+      console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
+      console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
+      
+      // Set up webhook
+      await setupWebhook();
+      
+      console.log('📱 Bot commands:');
+      console.log('   /start - Welcome message');
+      console.log('   /connect - Connect Twitter account');
+      console.log('   /post <text> - Post tweet');
+      console.log('   /state - Check connection status');
+      console.log('   /disconnect - Disconnect account');
+      console.log('   /help - Show help');
+      console.log('   /test - Test if bot is working');
+      console.log('🤖 AI Content Creator: Send any message for content creation help');
+      console.log('');
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
