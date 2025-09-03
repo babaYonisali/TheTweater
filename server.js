@@ -127,8 +127,8 @@ Use a conversational yet professional tone with emojis for engagement.No hashtag
   }
 }
 
-// Store OAuth sessions by state (more reliable than just last user)
-const oauthSessions = new Map();
+// OAuth sessions are now stored in the database instead of memory
+// This ensures they persist across serverless function instances
 
 // Middleware to parse JSON
 app.use(express.json());
@@ -204,9 +204,8 @@ bot.onText(/\/connect/, async (msg) => {
       oauthCodeVerifier: updatedUser.oauth?.codeVerifier ? 'Present' : 'Missing'
     });
 
-    // Store the OAuth session by state for the callback
-    oauthSessions.set(state, { chatId, telegramId, codeVerifier });
-    console.log('✅ Set OAuth session for callback:', { state, chatId, telegramId });
+    // OAuth session data is already stored in the user document
+    console.log('✅ OAuth session data saved to database:', { state, chatId, telegramId });
 
     const message = `🔗 *Twitter Connection*\n\n` +
                    `Click the link below to authorize this bot to post tweets on your behalf:\n\n` +
@@ -590,27 +589,26 @@ app.get('/auth/x/callback', async (req, res) => {
   }
   
   try {
-    // Send the callback URL back to the Telegram bot
-    const session = oauthSessions.get(state);
-    if (session) {
+    // Look up the OAuth session from the database
+    const user = await User.findOne({ 'oauth.state': state });
+    
+    if (user) {
+      console.log('📱 Found OAuth session in database:', { state, telegramId: user.telegramId });
+      
       // Use the configured callback URL or construct from request
       const callbackUrl = X_CALLBACK_URL || `${req.protocol}://${req.get('host')}${req.originalUrl}`;
       
       console.log('📱 Sending callback URL to Telegram bot:', callbackUrl);
-      console.log('📱 Session found:', session);
       
       // Send message to the user via Telegram Bot API
       const telegramResponse = await bot.sendMessage(
-        session.chatId,
+        user.telegramId,
         `🔐 *Twitter Authorization Complete!*\n\nCopy this URL and send it back to me:\n\n\`${callbackUrl}\`\n\n⚠️ *Important:* Send this exact URL back to the bot to complete the connection.`,
         { parse_mode: 'Markdown' }
       );
       
       if (telegramResponse) {
         console.log('✅ Successfully sent callback URL to Telegram user');
-        // Clean up the session after use
-        oauthSessions.delete(state);
-        console.log('🧹 Cleaned up OAuth session for state:', state);
         
         res.send(loadTemplate('authSuccess', { CALLBACK_URL: callbackUrl }));
       } else {
@@ -618,7 +616,7 @@ app.get('/auth/x/callback', async (req, res) => {
         res.status(500).send('Failed to notify Telegram bot');
       }
     } else {
-      console.log('⚠️ No pending OAuth session found');
+      console.log('⚠️ No pending OAuth session found for state:', state);
       res.send(loadTemplate('authError'));
     }
     
