@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitter Authorization Complete</title>
+  
+  <!-- Meta tags for better SEO and social sharing -->
+  <meta name="description" content="Twitter authorization completed successfully. Your account is now connected to the bot.">
+  <meta name="keywords" content="Twitter, Bot, OAuth, Authorization, Social Media">
+  <meta name="author" content="Twitter Bot">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{CALLBACK_URL}}">
+  <meta property="og:title" content="Twitter Authorization Complete">
+  <meta property="og:description" content="Your Twitter account has been successfully authorized!">
+  
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="{{CALLBACK_URL}}">
+  <meta property="twitter:title" content="Twitter Authorization Complete">
+  <meta property="twitter:description" content="Your Twitter account has been successfully authorized!">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNCIgZmlsbD0iIzAwZmY4OCIvPgo8dGV4dCB4PSIxNiIgeT0iMjIiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfkak8L3RleHQ+Cjwvc3ZnPgo=">
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: white;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+    
+    /* Grid Background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        linear-gradient(rgba(255, 215, 0, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 215, 0, 0.1) 1px, transparent 1px);
+      background-size: 50px 50px;
+      z-index: 1;
+    }
+    
+    .container {
+      position: relative;
+      z-index: 10;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px 20px;
+      text-align: center;
+    }
+    
+    .logo {
+      font-size: 2rem;
+      color: #ffd700;
+      margin-bottom: 15px;
+      text-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+      animation: glow 2s ease-in-out infinite alternate;
+    }
+    
+    @keyframes glow {
+      from { text-shadow: 0 0 30px rgba(255, 215, 0, 0.8); }
+      to { text-shadow: 0 0 40px rgba(255, 215, 0, 1), 0 0 60px rgba(255, 215, 0, 0.6); }
+    }
+    
+    .title-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .wengro-logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
+      animation: logo-pulse 2s ease-in-out infinite;
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+      border: 3px solid rgba(255, 215, 0, 0.3);
+    }
+    
+    @keyframes logo-pulse {
+      0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+      }
+      50% { 
+        transform: scale(1.05);
+        box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+      }
+    }
+    
+    .title {
+      font-size: 2rem;
+      color: #ffd700;
+      margin-bottom: 0;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+    }
+    
+    .subtitle {
+      font-size: 1rem;
+      color: #ffffff;
+      margin-bottom: 25px;
+      line-height: 1.4;
+      opacity: 0.9;
+    }
+    
+    .success-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 215, 0, 0.3);
+      border-radius: 20px;
+      padding: 25px;
+      margin: 20px 0;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      position: relative;
+      overflow: hidden;
+      transform-style: preserve-3d;
+      cursor: pointer;
+    }
+    
+    .success-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
+      animation: shimmer 3s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+    
+    .url-display {
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid rgba(255, 215, 0, 0.5);
+      border-radius: 15px;
+      padding: 20px;
+      margin: 20px 0;
+      word-break: break-all;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .url-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      width: 100%;
+    }
+    
+    .url-text {
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      color: #ffd700;
+      background: transparent;
+      border: none;
+      flex: 1;
+      text-align: center;
+      outline: none;
+      cursor: text;
+      user-select: all;
+    }
+    
+    .copy-btn {
+      background: linear-gradient(45deg, #ffd700, #ffed4e);
+      color: #000;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 100px;
+      justify-content: center;
+    }
+    
+    .copy-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(255, 215, 0, 0.5);
+      background: linear-gradient(45deg, #ffed4e, #ffd700);
+    }
+    
+    .copy-btn:active {
+      transform: translateY(0);
+    }
+    
+    .copy-btn.copied {
+      background: linear-gradient(45deg, #00ff88, #00cc6a);
+      color: #000;
+      box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+    }
+    
+    .copy-btn.copied:hover {
+      box-shadow: 0 6px 25px rgba(0, 255, 136, 0.5);
+    }
+    
+    .copy-icon {
+      font-size: 1rem;
+    }
+    
+    .copy-text {
+      font-weight: bold;
+    }
+    
+    .instructions {
+      background: rgba(255, 215, 0, 0.1);
+      border-left: 4px solid #ffd700;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 0 15px 15px 0;
+      text-align: left;
+    }
+    
+    .instructions h3 {
+      color: #ffd700;
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+    }
+    
+    .instructions ol {
+      padding-left: 20px;
+      line-height: 1.5;
+    }
+    
+    .instructions li {
+      margin-bottom: 5px;
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      background: #00ff88;
+      border-radius: 50%;
+      margin-right: 15px;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.7; }
+    }
+    
+    .particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+    
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: #ffd700;
+      border-radius: 50%;
+      animation: particle-float 6s infinite linear;
+    }
+    
+    @keyframes particle-float {
+      0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
+    }
+    
+    @media (max-width: 768px) {
+      .container { padding: 20px 15px; }
+      .title { font-size: 2rem; }
+      .logo { font-size: 2.5rem; }
+      .success-card { padding: 25px; }
+      
+      .title-container {
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .wengro-logo {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+      }
+      
+      .url-container {
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .copy-btn {
+        width: 100%;
+        min-width: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="particles" id="particles"></div>
+  
+  <div class="container">
+    <div class="logo"><img src="/wengroLogo.jpg" alt="WenGro Logo" class="wengro-logo"></div>
+    <div class="title-container">
+      <h1 class="title">Authorization Complete</h1>
+    </div>
+    <p class="subtitle">Your Twitter account has been successfully authorized!</p>
+    
+    <div class="success-card">
+      <div class="status-indicator"></div>
+      <h2 style="color: #00ff88; margin-bottom: 20px;">✅ Successfully Connected</h2>
+      <p style="margin-bottom: 25px;">The bot now has access to post tweets on your behalf.</p>
+      
+      <div class="instructions">
+        <h3>📱 Next Steps:</h3>
+        <ol>
+          <li>Copy the URL below from your browser's address bar</li>
+          <li>Return to Telegram and send it back to the bot</li>
+          <li>Your connection will be finalized automatically</li>
+        </ol>
+      </div>
+      
+      <div class="url-display">
+        <div class="url-container">
+          <input type="text" class="url-text" value="{{CALLBACK_URL}}" readonly>
+          <button class="copy-btn" onclick="copyToClipboard()">
+            <span class="copy-text">Copy</span>
+          </button>
+        </div>
+      </div>
+      
+      <p style="color: #ffd700; font-weight: bold; margin-top: 20px;">
+        ⚠️ Important: Send this exact URL back to complete the connection
+      </p>
+    </div>
+  </div>
+  
+  <script>
+    // Create floating particles
+    function createParticles() {
+      const particlesContainer = document.getElementById('particles');
+      const particleCount = 15;
+      
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.animationDelay = Math.random() * 6 + 's';
+        particle.style.animationDuration = (Math.random() * 3 + 3) + 's';
+        particlesContainer.appendChild(particle);
+      }
+    }
+    
+    // Copy to clipboard function
+    function copyToClipboard() {
+      const urlInput = document.querySelector('.url-text');
+      const copyBtn = document.querySelector('.copy-btn');
+      const copyText = copyBtn.querySelector('.copy-text');
+      
+      // Copy to clipboard
+      urlInput.select();
+      document.execCommand('copy');
+      
+      // Update button state
+      copyBtn.classList.add('copied');
+      copyText.textContent = 'Copied!';
+      
+      // Reset button after 2 seconds
+      setTimeout(() => {
+        copyBtn.classList.remove('copied');
+        copyText.textContent = 'Copy';
+      }, 2000);
+    }
+    
+    // 3D Tilt Effect for the success card
+    function init3DTilt() {
+      const card = document.querySelector('.success-card');
+      if (!card) return;
+      
+      let isHovering = false;
+      let lastTransform = '';
+      let animationFrame = null;
+      
+      card.addEventListener('mouseenter', function() {
+        isHovering = true;
+      });
+      
+      card.addEventListener('mousemove', function(e) {
+        if (!isHovering) return;
+        
+        // Cancel any pending animation frame to prevent conflicts
+        if (animationFrame) {
+          cancelAnimationFrame(animationFrame);
+        }
+        
+        // Use requestAnimationFrame for smooth updates
+        animationFrame = requestAnimationFrame(() => {
+          const rect = card.getBoundingClientRect();
+          
+          // Ensure we're still hovering before proceeding
+          if (!isHovering) return;
+          
+          // Clamp mouse position to card boundaries with larger padding
+          const padding = 20; // Increased padding for more stability
+          const clampedX = Math.max(padding, Math.min(e.clientX - rect.left, rect.width - padding));
+          const clampedY = Math.max(padding, Math.min(e.clientY - rect.top, rect.height - padding));
+          
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          
+          // Calculate rotation with even more conservative values
+          const rotateX = (clampedY - centerY) / centerY * -4; // Further reduced for maximum stability
+          const rotateY = (clampedX - centerX) / centerX * 4;  // Further reduced for maximum stability
+          
+          // Apply transform with minimal scale for stability
+          const newTransform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.002, 1.002, 1.002)`;
+          
+          // Only update if transform actually changed
+          if (newTransform !== lastTransform) {
+            card.style.transform = newTransform;
+            lastTransform = newTransform;
+          }
+        });
+      });
+      
+      card.addEventListener('mouseleave', function() {
+        isHovering = false;
+        lastTransform = '';
+        
+        // Cancel any pending animation frame
+        if (animationFrame) {
+          cancelAnimationFrame(animationFrame);
+          animationFrame = null;
+        }
+        
+        // Smooth reset to neutral position
+        card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
+      });
+    }
+    
+    // Initialize particles
+    createParticles();
+    
+    // Initialize 3D tilt effect
+    init3DTilt();
+    
+    // Add some interactive effects
+    document.addEventListener('mousemove', function(e) {
+      const particles = document.querySelectorAll('.particle');
+      particles.forEach((particle, index) => {
+        const speed = (index + 1) * 0.5;
+        const x = (e.clientX * speed) / window.innerWidth;
+        const y = (e.clientY * speed) / window.innerHeight;
+        particle.style.transform = `translate(${x}px, ${y}px)`;
+      });
+    });
+  </script>
+</body>
+</html>
