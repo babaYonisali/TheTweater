@@ -45,7 +45,7 @@ if (!DEEPSEEK_API_KEY) {
 }
 
 // ---------- Initialize Bot and AI ----------
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 const deepseek = new OpenAI({
   apiKey: DEEPSEEK_API_KEY,
   baseURL: 'https://api.deepseek.com'
@@ -542,15 +542,6 @@ bot.on('error', (error) => {
   console.error('Telegram bot error:', error);
 });
 
-bot.on('polling_error', (error) => {
-  console.error('Telegram polling error:', error);
-});
-
-// Log when bot starts polling
-bot.on('polling_start', () => {
-  console.log('🔄 Bot polling started');
-});
-
 // Handle all messages and route to appropriate handlers
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
@@ -678,15 +669,35 @@ app.post('/webhook', (req, res) => {
   res.sendStatus(200);
 });
 
+// Set webhook on startup
+async function setupWebhook() {
+  try {
+    const webhookUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}/webhook`
+      : process.env.X_CALLBACK_URL?.replace('/auth/x/callback', '/webhook') || `http://localhost:${PORT}/webhook`;
+    
+    console.log('🔗 Setting webhook URL:', webhookUrl);
+    
+    await bot.setWebHook(webhookUrl);
+    console.log('✅ Webhook set successfully');
+  } catch (error) {
+    console.error('❌ Failed to set webhook:', error);
+  }
+}
+
 // Custom 404 page
 app.use('*', (req, res) => {
   res.status(404).send(loadTemplate('404', { REQUESTED_PATH: req.originalUrl }));
 });
 
 // ---------- Start Server and Bot ----------
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
   console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
+  
+  // Set up webhook
+  await setupWebhook();
+  
   console.log('📱 Bot commands:');
   console.log('   /start - Welcome message');
   console.log('   /connect - Connect Twitter account');
@@ -700,16 +711,26 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down server...');
-  bot.stopPolling();
+  try {
+    await bot.deleteWebHook();
+    console.log('✅ Webhook deleted');
+  } catch (error) {
+    console.error('❌ Error deleting webhook:', error);
+  }
   mongoose.connection.close();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down server...');
-  bot.stopPolling();
+  try {
+    await bot.deleteWebHook();
+    console.log('✅ Webhook deleted');
+  } catch (error) {
+    console.error('❌ Error deleting webhook:', error);
+  }
   mongoose.connection.close();
   process.exit(0);
 });
