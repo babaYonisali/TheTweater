@@ -118,8 +118,8 @@ app.get('/health', (req, res) => {
   
   if (acceptsHtml) {
     // Return stylized HTML page using template
-    const dbStatus = database.isConnected() ? 'Connected' : 'Disconnected';
-    const dbStatusClass = database.isConnected() ? 'status-ok' : 'status-error';
+    const dbStatus = database.getConnectionStatus() ? 'Connected' : 'Disconnected';
+    const dbStatusClass = database.getConnectionStatus() ? 'status-ok' : 'status-error';
     
     res.send(loadTemplate('health', {
       DB_STATUS: dbStatus,
@@ -134,7 +134,7 @@ app.get('/health', (req, res) => {
       timestamp: new Date().toISOString(),
       message: 'Twitter Bot server is running',
       bot: 'Active',
-      database: database.isConnected() ? 'Connected' : 'Disconnected',
+      database: database.getConnectionStatus() ? 'Connected' : 'Disconnected',
       port: PORT,
       uptime: process.uptime()
     });
@@ -221,20 +221,20 @@ initialize();
 
 // For local development, start the server
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
-    console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
-    console.log('📱 Bot commands:');
-    console.log('   /start - Welcome message');
-    console.log('   /connect - Connect Twitter account');
-    console.log('   /post <text> - Post tweet');
-    console.log('   /state - Check connection status');
-    console.log('   /disconnect - Disconnect account');
-    console.log('   /help - Show help');
-    console.log('   /test - Test if bot is working');
-    console.log('🤖 AI Content Creator: Send any message for content creation help');
-    console.log('');
-  });
+app.listen(PORT, () => {
+  console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
+  console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
+  console.log('📱 Bot commands:');
+  console.log('   /start - Welcome message');
+  console.log('   /connect - Connect Twitter account');
+  console.log('   /post <text> - Post tweet');
+  console.log('   /state - Check connection status');
+  console.log('   /disconnect - Disconnect account');
+  console.log('   /help - Show help');
+  console.log('   /test - Test if bot is working');
+  console.log('🤖 AI Content Creator: Send any message for content creation help');
+  console.log('');
+});
 }
 
 // Graceful shutdown

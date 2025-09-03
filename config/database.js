@@ -57,7 +57,7 @@ class Database {
         return mongoose.connection;
     }
 
-    isConnected() {
+    getConnectionStatus() {
         return this.isConnected;
     }
 }
