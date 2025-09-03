@@ -65,10 +65,16 @@ app.post('/webhook', async (req, res) => {
     console.log('📨 Webhook body:', JSON.stringify(req.body, null, 2));
     console.log('📨 Bot initialized:', botHandler.isInitialized);
     
-    // Check if bot handler is initialized
+    // If bot handler is not initialized, try to initialize it
     if (!botHandler.isInitialized) {
-      console.error('❌ Bot handler not initialized yet, ignoring webhook');
-      return res.status(503).send('Bot not ready');
+      console.log('🔄 Bot handler not initialized, attempting to initialize...');
+      try {
+        await botHandler.init();
+        console.log('✅ Bot handler initialized successfully');
+      } catch (initError) {
+        console.error('❌ Failed to initialize bot handler:', initError);
+        return res.status(503).send('Bot initialization failed');
+      }
     }
     
     await botHandler.handleWebhookUpdate(req.body);
@@ -126,6 +132,36 @@ app.post('/test-webhook', (req, res) => {
     timestamp: new Date().toISOString(),
     received: req.body
   });
+});
+
+// Initialize bot endpoint
+app.post('/init-bot', async (req, res) => {
+  try {
+    console.log('🔄 Manual bot initialization requested');
+    if (botHandler.isInitialized) {
+      return res.json({ 
+        status: 'OK', 
+        message: 'Bot already initialized',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    await botHandler.init();
+    console.log('✅ Bot initialized successfully via manual request');
+    res.json({ 
+      status: 'OK', 
+      message: 'Bot initialized successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Failed to initialize bot:', error);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: 'Failed to initialize bot',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Health check endpoint
