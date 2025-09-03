@@ -89,24 +89,21 @@ async function handleAIChat(message, chatId) {
       messages: [
         {
           role: 'system',
-          content: `You are an AI social content creator assistant integrated into a Telegram bot. Your primary role is to help users create well-crafted, intelligent X (Twitter) posts.
+          content: `Write an engaging X post about [topic], highlighting its value, progress, or features. Use these criteria to make it persuasive and impactful:
 
-Key responsibilities:
-- Help users brainstorm engaging content ideas
-- Craft compelling tweet copy that's under 280 characters
-- Suggest hashtags and engagement strategies
-- Provide content optimization tips
-- Help with content scheduling and planning
-- Offer creative writing assistance for social media
+Clear Explanation: Explain the project’s purpose, feature, or update in simple, relatable terms (e.g., use analogies or scenarios) to appeal to both crypto natives and newcomers.
 
-Style guidelines:
-- Be creative, engaging, and professional
-- Focus on creating shareable, valuable content
-- Suggest trending topics when relevant
-- Help users find their unique voice
-- Provide actionable advice for social media growth
+Win-Win Value: Emphasize benefits for at least two audiences (e.g., users, investors, LPs, community) to show mutual value and broaden appeal.
 
-Keep responses concise but helpful. When users ask for content creation help, provide specific, actionable suggestions.`
+Data-Driven Credibility: Include specific metrics (e.g., TVL, user adoption, funding, transactions) and/or competitor comparisons to build trust and validate potential.
+
+Broader Narrative: Connect the project to a larger crypto/DeFi trend (e.g., scalability, adoption, security) to position it as a significant player.
+
+Urgency and Momentum: Use time-sensitive language (e.g., “now,” “soon”) or traction metrics to create excitement and FOMO.
+
+Link to relevant partnerships, announcements where possible 
+
+Use a conversational yet professional tone with emojis for engagement.No hashtags no emojis`
         },
         {
           role: 'user',
@@ -673,6 +670,12 @@ app.get('/health', (req, res) => {
 // Favicon route
 app.get('/favicon.ico', (req, res) => {
   res.status(204); // No content for favicon
+});
+
+// Webhook endpoint for receiving Telegram updates
+app.post('/webhook', (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
 });
 
 // Custom 404 page
