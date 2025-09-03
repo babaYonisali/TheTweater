@@ -103,9 +103,10 @@ app.get('/auth/x/callback', async (req, res) => {
   
   try {
     // The bot handler will process this through the webhook
-    // For now, just show a success page
-    const callbackUrl = X_CALLBACK_URL || `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-    res.send(loadTemplate('authSuccess', { CALLBACK_URL: callbackUrl }));
+    // Show the actual callback URL with parameters that the user needs to send back
+    const actualCallbackUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    console.log('📱 Displaying callback URL to user:', actualCallbackUrl);
+    res.send(loadTemplate('authSuccess', { CALLBACK_URL: actualCallbackUrl }));
   } catch (error) {
     console.error('❌ Error handling OAuth callback:', error);
     res.status(500).send('Internal server error');
