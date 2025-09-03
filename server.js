@@ -73,17 +73,19 @@ app.post('/webhook', async (req, res) => {
         console.log('✅ Bot handler initialized successfully');
       } catch (initError) {
         console.error('❌ Failed to initialize bot handler:', initError);
-        return res.status(503).send('Bot initialization failed');
+        // Still respond with 200 to avoid Telegram retrying
+        return res.status(200).json({ status: 'Bot initialization failed' });
       }
     }
     
     await botHandler.handleWebhookUpdate(req.body);
     console.log('✅ Webhook processed successfully');
-    res.sendStatus(200);
+    res.status(200).json({ status: 'OK' });
   } catch (error) {
     console.error('❌ Error processing webhook:', error);
     console.error('❌ Error stack:', error.stack);
-    res.status(500).send('Internal server error');
+    // Always respond with 200 to avoid Telegram retrying
+    res.status(200).json({ status: 'Error but OK' });
   }
 });
 
@@ -158,6 +160,49 @@ app.post('/init-bot', async (req, res) => {
     res.status(500).json({ 
       status: 'ERROR', 
       message: 'Failed to initialize bot',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Test webhook with fake message
+app.post('/test-bot', async (req, res) => {
+  try {
+    console.log('🧪 Testing bot with fake message');
+    
+    // Create a fake message
+    const fakeUpdate = {
+      message: {
+        message_id: 123,
+        from: {
+          id: 123456789,
+          is_bot: false,
+          first_name: "Test",
+          username: "testuser"
+        },
+        chat: {
+          id: 123456789,
+          first_name: "Test",
+          username: "testuser",
+          type: "private"
+        },
+        date: Math.floor(Date.now() / 1000),
+        text: "/start"
+      }
+    };
+    
+    await botHandler.handleWebhookUpdate(fakeUpdate);
+    res.json({ 
+      status: 'OK', 
+      message: 'Test message sent to bot',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Failed to test bot:', error);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: 'Failed to test bot',
       error: error.message,
       timestamp: new Date().toISOString()
     });

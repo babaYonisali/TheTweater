@@ -76,11 +76,7 @@ class TelegramBotHandler {
             console.log('=== WEBHOOK UPDATE RECEIVED ===');
             console.log('Update:', JSON.stringify(update, null, 2));
             
-            // Check if bot is initialized
-            if (!this.isInitialized || !this.bot) {
-                console.error('❌ Bot not initialized yet, ignoring update');
-                return;
-            }
+            // Bot initialization is handled in the webhook endpoint
             
             if (update.message && update.message.text) {
                 const msg = update.message;
