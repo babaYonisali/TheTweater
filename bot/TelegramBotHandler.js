@@ -50,6 +50,12 @@ class TelegramBotHandler {
             console.log('=== WEBHOOK UPDATE RECEIVED ===');
             console.log('Update:', JSON.stringify(update, null, 2));
             
+            // Check if bot is initialized
+            if (!this.isInitialized || !this.bot) {
+                console.error('❌ Bot not initialized yet, ignoring update');
+                return;
+            }
+            
             if (update.message && update.message.text) {
                 const msg = update.message;
                 console.log('Processing message:', msg.text);
@@ -97,6 +103,11 @@ class TelegramBotHandler {
 
     async handleStartCommand(msg) {
         try {
+            if (!this.bot) {
+                console.error('❌ Bot not initialized in handleStartCommand');
+                return;
+            }
+            
             this.logUserMessage(msg, '/start');
             const chatId = msg.chat.id;
             

@@ -74,6 +74,13 @@ app.get('/wengroLogo.jpg', (req, res) => {
 app.post('/webhook', async (req, res) => {
   try {
     console.log('📨 Webhook received');
+    
+    // Check if bot handler is initialized
+    if (!botHandler.isInitialized) {
+      console.error('❌ Bot handler not initialized yet, ignoring webhook');
+      return res.status(503).send('Bot not ready');
+    }
+    
     await botHandler.handleWebhookUpdate(req.body);
     res.sendStatus(200);
   } catch (error) {
