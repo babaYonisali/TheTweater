@@ -62,6 +62,8 @@ app.get('/wengroLogo.jpg', (req, res) => {
 app.post('/webhook', async (req, res) => {
   try {
     console.log('📨 Webhook received');
+    console.log('📨 Webhook body:', JSON.stringify(req.body, null, 2));
+    console.log('📨 Bot initialized:', botHandler.isInitialized);
     
     // Check if bot handler is initialized
     if (!botHandler.isInitialized) {
@@ -70,9 +72,11 @@ app.post('/webhook', async (req, res) => {
     }
     
     await botHandler.handleWebhookUpdate(req.body);
+    console.log('✅ Webhook processed successfully');
     res.sendStatus(200);
   } catch (error) {
     console.error('❌ Error processing webhook:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).send('Internal server error');
   }
 });
@@ -107,7 +111,20 @@ app.get('/test', (req, res) => {
     status: 'OK', 
     message: 'Server is responding',
     timestamp: new Date().toISOString(),
-    bot: 'Active'
+    bot: botHandler.isInitialized ? 'Initialized' : 'Not Initialized',
+    database: database.getConnectionStatus() ? 'Connected' : 'Disconnected'
+  });
+});
+
+// Test webhook endpoint
+app.post('/test-webhook', (req, res) => {
+  console.log('🧪 Test webhook endpoint called');
+  console.log('🧪 Request body:', JSON.stringify(req.body, null, 2));
+  res.json({ 
+    status: 'OK', 
+    message: 'Test webhook endpoint working',
+    timestamp: new Date().toISOString(),
+    received: req.body
   });
 });
 
