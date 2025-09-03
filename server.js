@@ -151,6 +151,9 @@ app.use('*', (req, res) => {
   res.status(404).send(loadTemplate('404', { REQUESTED_PATH: req.originalUrl }));
 });
 
+// Export the app for Vercel
+module.exports = app;
+
 // ---------- Webhook Setup ----------
 async function setupWebhook() {
   try {
@@ -190,8 +193,8 @@ async function initializeBot() {
   }
 }
 
-// ---------- Start Server and Bot ----------
-async function startServer() {
+// ---------- Initialize Everything ----------
+async function initialize() {
   try {
     // Connect to database first
     console.log('🔧 Connecting to database...');
@@ -200,33 +203,39 @@ async function startServer() {
     // Initialize bot handler
     await initializeBot();
     
-    // Start the server
-    app.listen(PORT, async () => {
-      console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
-      console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
-      
-      // Set up webhook
-      await setupWebhook();
-      
-      console.log('📱 Bot commands:');
-      console.log('   /start - Welcome message');
-      console.log('   /connect - Connect Twitter account');
-      console.log('   /post <text> - Post tweet');
-      console.log('   /state - Check connection status');
-      console.log('   /disconnect - Disconnect account');
-      console.log('   /help - Show help');
-      console.log('   /test - Test if bot is working');
-      console.log('🤖 AI Content Creator: Send any message for content creation help');
-      console.log('');
-    });
+    // Set up webhook
+    await setupWebhook();
+    
+    console.log('✅ All systems initialized successfully');
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    console.error('❌ Failed to initialize:', error);
+    // Don't exit in production (Vercel) - let the function continue
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
   }
 }
 
-// Start the server
-startServer();
+// Initialize everything
+initialize();
+
+// For local development, start the server
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
+    console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
+    console.log('📱 Bot commands:');
+    console.log('   /start - Welcome message');
+    console.log('   /connect - Connect Twitter account');
+    console.log('   /post <text> - Post tweet');
+    console.log('   /state - Check connection status');
+    console.log('   /disconnect - Disconnect account');
+    console.log('   /help - Show help');
+    console.log('   /test - Test if bot is working');
+    console.log('🤖 AI Content Creator: Send any message for content creation help');
+    console.log('');
+  });
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
