@@ -171,15 +171,7 @@ class TelegramBotHandler {
                                 `   • Creative writing assistance\n\n` +
                                 `Start by using /connect to authorize your Twitter account, or chat with me for content creation help!`;
 
-            const options = { parse_mode: 'Markdown' };
-            if (msg.message_thread_id) {
-                options.message_thread_id = msg.message_thread_id;
-                console.log('🔧 Using message_thread_id:', msg.message_thread_id);
-            } else {
-                console.log('⚠️ No message_thread_id found in message');
-            }
-            console.log('🔧 Send options:', options);
-            await this.bot.sendMessage(chatId, welcomeMessage, options);
+            await this.bot.sendMessage(chatId, welcomeMessage, msg.message_thread_id);
         } catch (error) {
             console.error('Error handling /start command:', error);
         }
@@ -200,13 +192,9 @@ class TelegramBotHandler {
                 if (user.tokenExpiresAt && new Date() > user.tokenExpiresAt) {
                     await User.findByIdAndUpdate(user._id, { isConnected: false });
                 } else {
-                    const options = {};
-                    if (msg.message_thread_id) {
-                        options.message_thread_id = msg.message_thread_id;
-                    }
                     await this.bot.sendMessage(chatId, 
                         `You're already connected as @${user.xHandle}! Use /post to tweet or /state to check your status.`,
-                        options
+                        { message_thread_id: msg.message_thread_id }
                     );
                     return;
                 }
@@ -247,14 +235,11 @@ class TelegramBotHandler {
                            `[🔐 Authorize Twitter](${url})\n\n` +
                            `⚠️ *Important:* After authorization, you'll be redirected to a page. Copy the URL from your browser's address bar and send it back to me to complete the connection.`;
 
-            const options = {
+            await this.bot.sendMessage(chatId, message, {
                 parse_mode: 'Markdown',
-                disable_web_page_preview: true
-            };
-            if (msg.message_thread_id) {
-                options.message_thread_id = msg.message_thread_id;
-            }
-            await this.bot.sendMessage(chatId, message, options);
+                disable_web_page_preview: true,
+                message_thread_id: msg.message_thread_id
+            });
 
         } catch (error) {
             console.error('Error handling /connect command:', error);
@@ -595,11 +580,9 @@ Use a conversational yet professional tone with emojis for engagement.No hashtag
             console.log('🤖 AI Response:', aiResponse);
             
             // Send the AI response
-            const options = {};
-            if (msg.message_thread_id) {
-                options.message_thread_id = msg.message_thread_id;
-            }
-            await this.bot.sendMessage(chatId, aiResponse, options);
+            await this.bot.sendMessage(chatId, aiResponse, { 
+                message_thread_id: msg.message_thread_id 
+            });
             
         } catch (error) {
             console.error('❌ AI Chat error:', error);
@@ -612,13 +595,9 @@ Use a conversational yet professional tone with emojis for engagement.No hashtag
             console.log(`⚠️ Unrecognized command: ${msg.text}`);
             this.logUserMessage(msg, 'Unrecognized command');
             const chatId = msg.chat.id;
-            const options = {};
-            if (msg.message_thread_id) {
-                options.message_thread_id = msg.message_thread_id;
-            }
             await this.bot.sendMessage(chatId, 
                 '❌ Unknown command. Use /help to see available commands.',
-                options
+                { message_thread_id: msg.message_thread_id }
             );
         } catch (error) {
             console.error('Error handling unknown command:', error);
