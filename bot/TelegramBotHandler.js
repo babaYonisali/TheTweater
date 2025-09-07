@@ -171,7 +171,10 @@ class TelegramBotHandler {
                                 `   • Creative writing assistance\n\n` +
                                 `Start by using /connect to authorize your Twitter account, or chat with me for content creation help!`;
 
-            await this.bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+            await this.bot.sendMessage(chatId, welcomeMessage, { 
+                parse_mode: 'Markdown',
+                message_thread_id: msg.message_thread_id 
+            });
         } catch (error) {
             console.error('Error handling /start command:', error);
         }
@@ -193,7 +196,8 @@ class TelegramBotHandler {
                     await User.findByIdAndUpdate(user._id, { isConnected: false });
                 } else {
                     await this.bot.sendMessage(chatId, 
-                        `You're already connected as @${user.xHandle}! Use /post to tweet or /state to check your status.`
+                        `You're already connected as @${user.xHandle}! Use /post to tweet or /state to check your status.`,
+                        { message_thread_id: msg.message_thread_id }
                     );
                     return;
                 }
@@ -236,12 +240,13 @@ class TelegramBotHandler {
 
             await this.bot.sendMessage(chatId, message, {
                 parse_mode: 'Markdown',
-                disable_web_page_preview: true
+                disable_web_page_preview: true,
+                message_thread_id: msg.message_thread_id
             });
 
         } catch (error) {
             console.error('Error handling /connect command:', error);
-            await this.sendErrorMessage(chatId, 'Failed to start Twitter authentication. Please try again.');
+            await this.sendErrorMessage(chatId, 'Failed to start Twitter authentication. Please try again.', msg);
         }
     }
 
@@ -578,11 +583,13 @@ Use a conversational yet professional tone with emojis for engagement.No hashtag
             console.log('🤖 AI Response:', aiResponse);
             
             // Send the AI response
-            await this.bot.sendMessage(chatId, aiResponse);
+            await this.bot.sendMessage(chatId, aiResponse, { 
+                message_thread_id: msg.message_thread_id 
+            });
             
         } catch (error) {
             console.error('❌ AI Chat error:', error);
-            await this.sendErrorMessage(chatId, 'Sorry, I\'m having trouble processing your request right now. Please try again later.');
+            await this.sendErrorMessage(chatId, 'Sorry, I\'m having trouble processing your request right now. Please try again later.', msg);
         }
     }
 
@@ -592,7 +599,8 @@ Use a conversational yet professional tone with emojis for engagement.No hashtag
             this.logUserMessage(msg, 'Unrecognized command');
             const chatId = msg.chat.id;
             await this.bot.sendMessage(chatId, 
-                '❌ Unknown command. Use /help to see available commands.'
+                '❌ Unknown command. Use /help to see available commands.',
+                { message_thread_id: msg.message_thread_id }
             );
         } catch (error) {
             console.error('Error handling unknown command:', error);
@@ -625,9 +633,10 @@ Use a conversational yet professional tone with emojis for engagement.No hashtag
         console.log('================================\n');
     }
 
-    async sendErrorMessage(chatId, message) {
+    async sendErrorMessage(chatId, message, msg = null) {
         try {
-            await this.bot.sendMessage(chatId, `❌ ${message}`);
+            const options = msg && msg.message_thread_id ? { message_thread_id: msg.message_thread_id } : {};
+            await this.bot.sendMessage(chatId, `❌ ${message}`, options);
         } catch (error) {
             console.error('Error sending error message:', error);
         }
