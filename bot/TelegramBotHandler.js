@@ -171,7 +171,15 @@ class TelegramBotHandler {
                                 `   • Creative writing assistance\n\n` +
                                 `Start by using /connect to authorize your Twitter account, or chat with me for content creation help!`;
 
-            await this.bot.sendMessage(chatId, welcomeMessage, msg.message_thread_id);
+            const options = { parse_mode: 'Markdown' };
+            if (msg.message_thread_id) {
+                options.message_thread_id = msg.message_thread_id;
+                console.log('🔧 Using message_thread_id:', msg.message_thread_id);
+            } else {
+                console.log('⚠️ No message_thread_id found');
+            }
+            console.log('🔧 Send options:', options);
+            await this.bot.sendMessage(chatId, welcomeMessage, options);
         } catch (error) {
             console.error('Error handling /start command:', error);
         }
@@ -399,6 +407,10 @@ class TelegramBotHandler {
             this.logUserMessage(msg, '/state');
             const chatId = msg.chat.id;
             const telegramId = msg.from.id;
+            
+            // Debug logging
+            console.log('🔧 State command - message_thread_id:', msg.message_thread_id);
+            console.log('🔧 State command - is_topic_message:', msg.is_topic_message);
 
             const user = await User.findOne({ telegramId });
             
@@ -406,7 +418,10 @@ class TelegramBotHandler {
                 await this.bot.sendMessage(chatId, 
                     `❌ *No account found!*\n\n` +
                     `Use /connect to connect your Twitter account.`,
-                    { parse_mode: 'Markdown' }
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
                 );
                 return;
             }
@@ -415,7 +430,10 @@ class TelegramBotHandler {
                 await this.bot.sendMessage(chatId, 
                     `❌ *Not connected to Twitter*\n\n` +
                     `Use /connect to connect your account.`,
-                    { parse_mode: 'Markdown' }
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
                 );
                 return;
             }
@@ -426,7 +444,10 @@ class TelegramBotHandler {
                 await this.bot.sendMessage(chatId, 
                     `❌ *Twitter session expired*\n\n` +
                     `Use /connect to reconnect your account.`,
-                    { parse_mode: 'Markdown' }
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
                 );
                 return;
             }
@@ -434,13 +455,19 @@ class TelegramBotHandler {
             const lastActivity = new Date(user.lastActivity).toLocaleString();
             const joinTime = new Date(user.joinTime).toLocaleString();
 
+            const options = { parse_mode: 'Markdown' };
+            if (msg.message_thread_id) {
+                options.message_thread_id = msg.message_thread_id;
+            }
+            console.log('🔧 State command - Final options:', options);
+            
             await this.bot.sendMessage(chatId, 
                 `✅ *Connected to Twitter*\n\n` +
                 `🐦 *Handle:* @${user.xHandle}\n` +
                 `⏰ *Last Activity:* ${lastActivity}\n` +
                 `📅 *Connected Since:* ${joinTime}\n\n` +
                 `Use /post <text> to tweet!`,
-                { parse_mode: 'Markdown' }
+                options
             );
 
         } catch (error) {
