@@ -155,21 +155,20 @@ class TelegramBotHandler {
             this.logUserMessage(msg, '/start');
             const chatId = msg.chat.id;
             
-            const welcomeMessage = `🐦 *Welcome to Twitter Bot with AI Content Creator!*\n\n` +
-                                `I can help you post tweets to Twitter from Telegram AND assist you with creating amazing social media content!\n\n` +
+            const welcomeMessage = `🐦 *Welcome to Twitter Bot with AI Tweet Generator!*\n\n` +
+                                `I can help you generate tweets from long-form text and post them to Twitter!\n\n` +
                                 `*Available commands:*\n` +
                                 `🔗 /connect - Connect your Twitter account\n` +
                                 `📝 /post <text> - Post a tweet\n` +
                                 `📊 /state - Check connection status\n` +
                                 `🚫 /disconnect - Disconnect account\n\n` +
-                                `*AI Content Creator:*\n` +
-                                `💬 Chat with me to get help with:\n` +
-                                `   • Content ideas and brainstorming\n` +
-                                `   • Crafting engaging tweets\n` +
-                                `   • Hashtag strategies\n` +
-                                `   • Social media optimization\n` +
-                                `   • Creative writing assistance\n\n` +
-                                `Start by using /connect to authorize your Twitter account, or chat with me for content creation help!`;
+                                `*AI Tweet Generator:*\n` +
+                                `💬 Send me any long-form text and I'll create 3-4 engaging tweets for you!\n` +
+                                `   • Paste your article, blog post, or content\n` +
+                                `   • I'll analyze it and generate multiple tweet options\n` +
+                                `   • Each tweet will be optimized for Twitter\n` +
+                                `   • Copy and use /post to publish any tweet\n\n` +
+                                `Start by using /connect to authorize your Twitter account, then send me your long-form content!`;
 
             const options = { parse_mode: 'Markdown' };
             if (msg.message_thread_id) {
@@ -514,26 +513,25 @@ class TelegramBotHandler {
             this.logUserMessage(msg, '/help');
             const chatId = msg.chat.id;
             
-            const helpMessage = `📚 *Twitter Bot with AI Content Creator Help*\n\n` +
+            const helpMessage = `📚 *Twitter Bot with AI Tweet Generator Help*\n\n` +
                              `*Commands:*\n` +
                              `🔗 /connect - Start Twitter OAuth2 authentication\n` +
                              `📝 /post <text> - Post tweet (max 280 chars)\n` +
                              `📊 /state - Check Twitter connection status\n` +
                              `🚫 /disconnect - Disconnect Twitter account\n\n` +
-                             `*AI Content Creator:*\n` +
-                             `💬 Send any message to get help with:\n` +
-                             `   • Content ideas and brainstorming\n` +
-                             `   • Crafting engaging tweets\n` +
-                             `   • Hashtag strategies\n` +
-                             `   • Social media optimization\n` +
-                             `   • Creative writing assistance\n\n` +
+                             `*AI Tweet Generator:*\n` +
+                             `💬 Send any long-form text to generate 3-4 tweets:\n` +
+                             `   • Paste your article, blog post, or content\n` +
+                             `   • I'll analyze and create multiple tweet options\n` +
+                             `   • Each tweet is optimized for Twitter (under 280 chars)\n` +
+                             `   • Copy any tweet and use /post to publish it\n\n` +
                              `*How to use:*\n` +
                              `1. Use /connect to authorize Twitter\n` +
                              `2. Click the authorization link\n` +
                              `3. Copy the URL from your browser and send it back\n` +
-                             `4. Use /post <text> to tweet\n` +
-                             `5. Check /state for connection info\n` +
-                             `6. Chat with AI for content creation help!`;
+                             `4. Send me your long-form text to generate tweets\n` +
+                             `5. Copy any generated tweet and use /post to publish\n` +
+                             `6. Check /state for connection info`;
 
             await this.bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
         } catch (error) {
@@ -562,14 +560,35 @@ class TelegramBotHandler {
 
     async handleAIChat(msg) {
         try {
-            this.logUserMessage(msg, 'AI Chat');
+            this.logUserMessage(msg, 'AI Tweet Generation');
             const chatId = msg.chat.id;
             const message = msg.text;
             
-            console.log('🤖 AI Chat request:', message);
+            console.log('🤖 AI Tweet Generation request:', message);
             
             // Send typing indicator
             await this.bot.sendChatAction(chatId, 'typing');
+            
+            // Hard-coded pre-prompt for tweet generation
+            const tweetGenerationPrompt = `You are an expert social media content creator. Your task is to analyze the provided long-form text and create 3-4 engaging, suitable tweets.
+
+Guidelines for creating tweets:
+1. Each tweet must be concise (under 280 characters)
+2. Extract key ideas, insights, or highlights from the text
+3. Make each tweet engaging, clear, and valuable
+4. Use a conversational yet professional tone
+5. Each tweet should stand alone but complement the others
+6. Focus on different angles or aspects of the content
+7. Use emojis sparingly and appropriately
+8. Include relevant hashtags when appropriate (2-3 max per tweet)
+
+Format your response as follows:
+Tweet 1: [first tweet text]
+Tweet 2: [second tweet text]
+Tweet 3: [third tweet text]
+Tweet 4: [fourth tweet text - optional]
+
+If you can only create 3 high-quality tweets, that's acceptable. Always prioritize quality over quantity.`;
             
             // Call DeepSeek API
             const response = await this.deepseek.chat.completions.create({
@@ -577,43 +596,33 @@ class TelegramBotHandler {
                 messages: [
                     {
                         role: 'system',
-                        content: `Write an engaging X post about [topic], highlighting its value, progress, or features. Use these criteria to make it persuasive and impactful:
-
-Clear Explanation: Explain the project's purpose, feature, or update in simple, relatable terms (e.g., use analogies or scenarios) to appeal to both crypto natives and newcomers.
-
-Win-Win Value: Emphasize benefits for at least two audiences (e.g., users, investors, LPs, community) to show mutual value and broaden appeal.
-
-Data-Driven Credibility: Include specific metrics (e.g., TVL, user adoption, funding, transactions) and/or competitor comparisons to build trust and validate potential.
-
-Broader Narrative: Connect the project to a larger crypto/DeFi trend (e.g., scalability, adoption, security) to position it as a significant player.
-
-Urgency and Momentum: Use time-sensitive language (e.g., "now," "soon") or traction metrics to create excitement and FOMO.
-
-Link to relevant partnerships, announcements where possible 
-
-Use a conversational yet professional tone with emojis for engagement.No hashtags no emojis`
+                        content: tweetGenerationPrompt
                     },
                     {
                         role: 'user',
-                        content: message
+                        content: `Please analyze this long-form text and create 3-4 suitable tweets:\n\n${message}`
                     }
                 ],
-                max_tokens: 500,
+                max_tokens: 800,
                 temperature: 0.7
             });
             
-            const aiResponse = response.choices[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
+            const aiResponse = response.choices[0]?.message?.content || 'Sorry, I couldn\'t generate tweets.';
             
             console.log('🤖 AI Response:', aiResponse);
             
+            // Format the response for better readability
+            const formattedResponse = `🐦 *Generated Tweets*\n\n${aiResponse}\n\n💡 *Tip:* You can copy any tweet and use /post to publish it!`;
+            
             // Send the AI response
-            await this.bot.sendMessage(chatId, aiResponse, { 
+            await this.bot.sendMessage(chatId, formattedResponse, { 
+                parse_mode: 'Markdown',
                 message_thread_id: msg.message_thread_id 
             });
             
         } catch (error) {
-            console.error('❌ AI Chat error:', error);
-            await this.sendErrorMessage(chatId, 'Sorry, I\'m having trouble processing your request right now. Please try again later.', msg);
+            console.error('❌ AI Tweet Generation error:', error);
+            await this.sendErrorMessage(chatId, 'Sorry, I\'m having trouble generating tweets right now. Please try again later.', msg);
         }
     }
 
