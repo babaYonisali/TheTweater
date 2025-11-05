@@ -124,6 +124,13 @@ class TelegramBotHandler {
     }
 
     async handleStartCommand(msg) {
+        const chatId = msg?.chat?.id;
+        
+        if (!chatId) {
+            console.error('Invalid message format in handleStartCommand:', msg);
+            return;
+        }
+        
         try {
             if (!this.bot) {
                 console.error('❌ Bot not initialized in handleStartCommand');
@@ -133,27 +140,14 @@ class TelegramBotHandler {
                     deepseekExists: !!this.deepseek,
                     twitterClientExists: !!this.twitterClient
                 });
+                // Try to send error message if bot exists but wasn't initialized
+                if (this.bot) {
+                    await this.bot.sendMessage(chatId, '❌ Bot is not properly initialized. Please try again in a moment.');
+                }
                 return;
             }
             
-            // Check database connection
-            const mongoose = require('mongoose');
-            if (mongoose.connection.readyState !== 1) {
-                console.error('❌ Database not connected, attempting to reconnect...');
-                await mongoose.connect(process.env.MONGODB_URI, {
-                    useNewUrlParser: true,
-                    useUnifiedTopology: true,
-                    serverSelectionTimeoutMS: 30000,
-                    socketTimeoutMS: 45000,
-                    connectTimeoutMS: 30000,
-                    maxPoolSize: 10,
-                    retryWrites: true,
-                    w: 'majority'
-                });
-            }
-            
             this.logUserMessage(msg, '/start');
-            const chatId = msg.chat.id;
             
             const welcomeMessage = `🐦 *Welcome to Twitter Bot with AI Tweet Generator!*\n\n` +
                                 `I can help you generate tweets from long-form text and post them to Twitter!\n\n` +
@@ -181,15 +175,49 @@ class TelegramBotHandler {
             await this.bot.sendMessage(chatId, welcomeMessage, options);
         } catch (error) {
             console.error('Error handling /start command:', error);
+            // Try to send error message to user
+            try {
+                if (this.bot && chatId) {
+                    await this.bot.sendMessage(chatId, 
+                        '❌ *Error*\n\n' +
+                        'Unable to process your request right now. Please try again in a moment.',
+                        { parse_mode: 'Markdown' }
+                    );
+                }
+            } catch (sendError) {
+                console.error('Failed to send error message:', sendError);
+            }
         }
     }
 
     async handleConnectCommand(msg) {
+        const chatId = msg?.chat?.id;
+        const telegramId = msg?.from?.id;
+        const telegramUsername = msg?.from?.username;
+        
+        if (!chatId || !telegramId) {
+            console.error('Invalid message format in handleConnectCommand:', msg);
+            return;
+        }
+        
         try {
             this.logUserMessage(msg, '/connect');
-            const chatId = msg.chat.id;
-            const telegramId = msg.from.id;
-            const telegramUsername = msg.from.username;
+
+            // Ensure database connection
+            const dbConnected = await this.ensureDatabaseConnection();
+            if (!dbConnected) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database temporarily unavailable*\n\n` +
+                    `Unable to process your request right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
+                return;
+            }
 
             // Check if user already exists and is connected
             let user = await User.findOne({ telegramId });
@@ -250,16 +278,37 @@ class TelegramBotHandler {
 
         } catch (error) {
             console.error('Error handling /connect command:', error);
-            await this.sendErrorMessage(chatId, 'Failed to start Twitter authentication. Please try again.', msg);
+            
+            // Check if error is database-related
+            if (error.name === 'MongooseError' || error.name === 'MongoServerSelectionError' || error.message?.includes('buffering timed out')) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database connection error*\n\n` +
+                    `Unable to process your request right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg?.message_thread_id 
+                    }
+                );
+            } else {
+                await this.sendErrorMessage(chatId, 'Failed to start Twitter authentication. Please try again.', msg);
+            }
         }
     }
 
     async handleUrlMessage(msg) {
+        const chatId = msg?.chat?.id;
+        const telegramId = msg?.from?.id;
+        const url = msg?.text;
+        
+        if (!chatId || !telegramId || !url) {
+            console.error('Invalid message format in handleUrlMessage:', msg);
+            return;
+        }
+        
         try {
             this.logUserMessage(msg, 'URL callback');
-            const chatId = msg.chat.id;
-            const telegramId = msg.from.id;
-            const url = msg.text;
 
             // Check if this looks like a Twitter callback URL
             if (!url.includes('code=') || !url.includes('state=')) {
@@ -273,6 +322,22 @@ class TelegramBotHandler {
 
             if (!state || !code) {
                 await this.bot.sendMessage(chatId, '❌ Invalid authorization URL. Please try /connect again.');
+                return;
+            }
+
+            // Ensure database connection
+            const dbConnected = await this.ensureDatabaseConnection();
+            if (!dbConnected) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database temporarily unavailable*\n\n` +
+                    `Unable to complete authentication right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
                 return;
             }
 
@@ -336,20 +401,57 @@ class TelegramBotHandler {
 
         } catch (error) {
             console.error('Error handling URL message:', error);
-            await this.sendErrorMessage(chatId, 'Authentication failed. Please try again or use /connect to restart.');
+            
+            // Check if error is database-related
+            if (error.name === 'MongooseError' || error.name === 'MongoServerSelectionError' || error.message?.includes('buffering timed out')) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database connection error*\n\n` +
+                    `Unable to complete authentication right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg?.message_thread_id 
+                    }
+                );
+            } else {
+                await this.sendErrorMessage(chatId, 'Authentication failed. Please try again or use /connect to restart.', msg);
+            }
         }
     }
 
     async handlePostCommand(msg, text) {
+        const chatId = msg?.chat?.id;
+        const telegramId = msg?.from?.id;
+        
+        if (!chatId || !telegramId) {
+            console.error('Invalid message format in handlePostCommand:', msg);
+            return;
+        }
+        
         try {
             this.logUserMessage(msg, '/post');
-            const chatId = msg.chat.id;
-            const telegramId = msg.from.id;
 
             if (text.length > 280) {
                 await this.bot.sendMessage(chatId, 
                     `❌ Tweet too long! Maximum 280 characters allowed.\n\n` +
                     `Your tweet: ${text.length} characters`
+                );
+                return;
+            }
+
+            // Ensure database connection
+            const dbConnected = await this.ensureDatabaseConnection();
+            if (!dbConnected) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database temporarily unavailable*\n\n` +
+                    `Unable to post your tweet right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
                 );
                 return;
             }
@@ -397,19 +499,63 @@ class TelegramBotHandler {
 
         } catch (error) {
             console.error('Error handling /post command:', error);
-            await this.sendErrorMessage(chatId, 'Failed to post tweet. Please try again or use /connect to reconnect.');
+            
+            // Check if error is database-related
+            if (error.name === 'MongooseError' || error.name === 'MongoServerSelectionError' || error.message?.includes('buffering timed out')) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database connection error*\n\n` +
+                    `Unable to post your tweet right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg?.message_thread_id 
+                    }
+                );
+            } else {
+                await this.sendErrorMessage(chatId, 'Failed to post tweet. Please try again or use /connect to reconnect.', msg);
+            }
         }
     }
 
     async handleStateCommand(msg) {
+        // Extract chatId early to ensure it's available in catch block
+        const chatId = msg?.chat?.id;
+        const telegramId = msg?.from?.id;
+        
+        if (!chatId || !telegramId) {
+            console.error('Invalid message format in handleStateCommand:', msg);
+            return;
+        }
+        
         try {
             this.logUserMessage(msg, '/state');
-            const chatId = msg.chat.id;
-            const telegramId = msg.from.id;
             
             // Debug logging
             console.log('🔧 State command - message_thread_id:', msg.message_thread_id);
             console.log('🔧 State command - is_topic_message:', msg.is_topic_message);
+
+            // Check database connection before querying
+            const mongoose = require('mongoose');
+            if (mongoose.connection.readyState !== 1) {
+                console.warn('⚠️ Database not connected, attempting to reconnect...');
+                try {
+                    const database = require('../config/database');
+                    await database.connect();
+                } catch (dbError) {
+                    console.error('❌ Database connection failed:', dbError.message);
+                    await this.bot.sendMessage(chatId, 
+                        `⚠️ *Database temporarily unavailable*\n\n` +
+                        `Please try again in a moment.\n` +
+                        `If the problem persists, check your MongoDB Atlas IP whitelist settings.`,
+                        { 
+                            parse_mode: 'Markdown',
+                            message_thread_id: msg.message_thread_id 
+                        }
+                    );
+                    return;
+                }
+            }
 
             const user = await User.findOne({ telegramId });
             
@@ -471,15 +617,52 @@ class TelegramBotHandler {
 
         } catch (error) {
             console.error('Error handling /state command:', error);
-            await this.sendErrorMessage(chatId, 'Failed to check status. Please try again.');
+            
+            // Check if error is database-related
+            if (error.name === 'MongooseError' || error.name === 'MongoServerSelectionError' || error.message?.includes('buffering timed out')) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database connection error*\n\n` +
+                    `Unable to check your status right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg?.message_thread_id 
+                    }
+                );
+            } else {
+                await this.sendErrorMessage(chatId, 'Failed to check status. Please try again.', msg);
+            }
         }
     }
 
     async handleDisconnectCommand(msg) {
+        const chatId = msg?.chat?.id;
+        const telegramId = msg?.from?.id;
+        
+        if (!chatId || !telegramId) {
+            console.error('Invalid message format in handleDisconnectCommand:', msg);
+            return;
+        }
+        
         try {
             this.logUserMessage(msg, '/disconnect');
-            const chatId = msg.chat.id;
-            const telegramId = msg.from.id;
+
+            // Ensure database connection
+            const dbConnected = await this.ensureDatabaseConnection();
+            if (!dbConnected) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database temporarily unavailable*\n\n` +
+                    `Unable to disconnect right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
+                return;
+            }
 
             const user = await User.findOne({ telegramId });
             
@@ -504,7 +687,22 @@ class TelegramBotHandler {
 
         } catch (error) {
             console.error('Error handling /disconnect command:', error);
-            await this.sendErrorMessage(chatId, 'Failed to disconnect. Please try again.');
+            
+            // Check if error is database-related
+            if (error.name === 'MongooseError' || error.name === 'MongoServerSelectionError' || error.message?.includes('buffering timed out')) {
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *Database connection error*\n\n` +
+                    `Unable to disconnect right now.\n` +
+                    `Please try again in a moment.\n\n` +
+                    `If this persists, check your MongoDB Atlas IP whitelist settings.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg?.message_thread_id 
+                    }
+                );
+            } else {
+                await this.sendErrorMessage(chatId, 'Failed to disconnect. Please try again.', msg);
+            }
         }
     }
 
@@ -643,6 +841,23 @@ If you can only create 3 high-quality tweets, that's acceptable. Always prioriti
     setupCommandHandlers() {
         // Webhook mode - no polling handlers needed
         console.log('Bot configured for webhook mode - no polling handlers');
+    }
+
+    // Helper method to ensure database connection
+    async ensureDatabaseConnection() {
+        const mongoose = require('mongoose');
+        if (mongoose.connection.readyState === 1) {
+            return true; // Already connected
+        }
+        
+        try {
+            const database = require('../config/database');
+            await database.connect();
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to connect to database:', error.message);
+            return false;
+        }
     }
 
     logUserMessage(msg, command) {

@@ -19,8 +19,15 @@ class Database {
                 // Optimize for serverless: connection pooling
                 maxPoolSize: 5,
                 minPoolSize: 1,
-                serverSelectionTimeoutMS: 5000, // Faster timeout for cold starts
+                serverSelectionTimeoutMS: 10000, // Increased timeout for Vercel cold starts
                 socketTimeoutMS: 45000,
+                connectTimeoutMS: 10000,
+                // Retry configuration for better resilience
+                retryWrites: true,
+                w: 'majority',
+                // Better handling for serverless environments
+                bufferCommands: false,
+                bufferMaxEntries: 0,
             });
 
             this.isConnected = true;

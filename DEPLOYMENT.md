@@ -70,10 +70,26 @@ vercel --prod
 ## Troubleshooting
 
 ### Common Issues:
+
 1. **Environment variables not set** - Check Vercel dashboard
-2. **MongoDB connection failed** - Ensure MongoDB Atlas allows Vercel IPs
+
+2. **MongoDB connection failed - IP whitelist issue** ⚠️ CRITICAL
+   - Vercel serverless functions use dynamic IP addresses
+   - MongoDB Atlas requires IP whitelisting by default
+   - **Solution**: In MongoDB Atlas:
+     1. Go to Network Access → IP Access List
+     2. Click "Add IP Address"
+     3. Click "Allow Access from Anywhere" (adds `0.0.0.0/0`)
+     4. OR add Vercel's IP ranges (if available)
+   - **Security Note**: Using `0.0.0.0/0` allows access from any IP. Ensure:
+     - Your MongoDB connection string uses strong authentication
+     - Database user has minimal required permissions
+     - Consider using MongoDB Atlas VPC peering for production (more secure)
+   
 3. **Twitter OAuth fails** - Check callback URL matches exactly
+
 4. **Bot not responding** - Check Telegram bot token
+
 5. **AI not working** - Verify DeepSeek API key
 
 ### Logs:
