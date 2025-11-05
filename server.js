@@ -60,33 +60,44 @@ app.get('/wengroLogo.jpg', (req, res) => {
 
 // Webhook endpoint for receiving Telegram updates
 app.post('/webhook', async (req, res) => {
-  try {
-    console.log('📨 Webhook received');
-    console.log('📨 Webhook body:', JSON.stringify(req.body, null, 2));
-    console.log('📨 Bot initialized:', botHandler.isInitialized);
-    
-    // If bot handler is not initialized, try to initialize it
-    if (!botHandler.isInitialized) {
-      console.log('🔄 Bot handler not initialized, attempting to initialize...');
-      try {
-        await botHandler.init();
-        console.log('✅ Bot handler initialized successfully');
-      } catch (initError) {
-        console.error('❌ Failed to initialize bot handler:', initError);
-        // Still respond with 200 to avoid Telegram retrying
-        return res.status(200).json({ status: 'Bot initialization failed' });
+  // Respond immediately to Telegram to prevent timeout
+  // This is crucial for Vercel cold starts
+  res.status(200).json({ status: 'OK' });
+  
+  // Process webhook update asynchronously (don't await)
+  (async () => {
+    try {
+      console.log('📨 Webhook received');
+      console.log('📨 Bot initialized:', botHandler.isInitialized);
+      
+      // Ensure database connection (non-blocking)
+      if (!database.getConnectionStatus()) {
+        try {
+          await database.connect();
+        } catch (dbError) {
+          console.error('❌ Database connection failed:', dbError.message);
+        }
       }
+      
+      // If bot handler is not initialized, try to initialize it
+      if (!botHandler.isInitialized) {
+        console.log('🔄 Bot handler not initialized, attempting to initialize...');
+        try {
+          await botHandler.init();
+          console.log('✅ Bot handler initialized successfully');
+        } catch (initError) {
+          console.error('❌ Failed to initialize bot handler:', initError);
+          return;
+        }
+      }
+      
+      await botHandler.handleWebhookUpdate(req.body);
+      console.log('✅ Webhook processed successfully');
+    } catch (error) {
+      console.error('❌ Error processing webhook:', error);
+      console.error('❌ Error stack:', error.stack);
     }
-    
-    await botHandler.handleWebhookUpdate(req.body);
-    console.log('✅ Webhook processed successfully');
-    res.status(200).json({ status: 'OK' });
-  } catch (error) {
-    console.error('❌ Error processing webhook:', error);
-    console.error('❌ Error stack:', error.stack);
-    // Always respond with 200 to avoid Telegram retrying
-    res.status(200).json({ status: 'Error but OK' });
-  }
+  })();
 });
 
 // OAuth callback endpoint
@@ -329,17 +340,26 @@ async function initializeBot() {
 // ---------- Initialize Everything ----------
 async function initialize() {
   try {
-    // Connect to database first
-    console.log('🔧 Connecting to database...');
-    await database.connect();
-    
-    // Initialize bot handler
-    await initializeBot();
-    
-    // Set up webhook
-    await setupWebhook();
-    
-    console.log('✅ All systems initialized successfully');
+    // In production (Vercel), skip full initialization to reduce cold start time
+    // Initialization will happen on first webhook call
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔧 Production mode: Lazy initialization (will init on first request)');
+      // Don't wait for database or bot init - let them initialize on first request
+      // This makes cold starts much faster
+      console.log('✅ Server ready (fast cold start)');
+    } else {
+      // Local development: full initialization
+      console.log('🔧 Connecting to database...');
+      await database.connect();
+      
+      // Initialize bot handler
+      await initializeBot();
+      
+      // Set up webhook
+      await setupWebhook();
+      
+      console.log('✅ All systems initialized successfully');
+    }
   } catch (error) {
     console.error('❌ Failed to initialize:', error);
     // Don't exit in production (Vercel) - let the function continue

@@ -8,8 +8,19 @@ class Database {
 
     async connect() {
         try {
+            // If already connected, return existing connection
+            if (mongoose.connection.readyState === 1) {
+                this.isConnected = true;
+                return mongoose.connection;
+            }
+            
             await mongoose.connect(process.env.MONGODB_URI, {
                 dbName: process.env.MONGODB_DB_NAME,
+                // Optimize for serverless: connection pooling
+                maxPoolSize: 5,
+                minPoolSize: 1,
+                serverSelectionTimeoutMS: 5000, // Faster timeout for cold starts
+                socketTimeoutMS: 45000,
             });
 
             this.isConnected = true;
@@ -58,7 +69,9 @@ class Database {
     }
 
     getConnectionStatus() {
-        return this.isConnected;
+        // Check both our flag and mongoose's actual connection state
+        const mongooseReady = mongoose.connection.readyState === 1; // 1 = connected
+        return this.isConnected || mongooseReady;
     }
 }
 
