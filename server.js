@@ -74,6 +74,7 @@ app.post('/webhook', async (req, res) => {
       if (!database.getConnectionStatus()) {
         try {
           await database.connect();
+          console.log('✅ Database connected');
         } catch (dbError) {
           console.error('❌ Database connection failed:', dbError.message);
         }
@@ -87,10 +88,12 @@ app.post('/webhook', async (req, res) => {
           console.log('✅ Bot handler initialized successfully');
         } catch (initError) {
           console.error('❌ Failed to initialize bot handler:', initError);
+          console.error('❌ Init error stack:', initError.stack);
           return;
         }
       }
       
+      // Process the webhook update
       await botHandler.handleWebhookUpdate(req.body);
       console.log('✅ Webhook processed successfully');
     } catch (error) {
@@ -224,23 +227,28 @@ app.post('/test-bot', async (req, res) => {
 app.post('/set-webhook', async (req, res) => {
   try {
     const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ 
-        status: 'ERROR', 
-        message: 'URL is required',
-        timestamp: new Date().toISOString()
-      });
+    const webhookUrl = url || 'https://the-tweater-theta.vercel.app/webhook';
+    
+    // Ensure bot is initialized
+    if (!botHandler.isInitialized) {
+      console.log('🔄 Initializing bot before setting webhook...');
+      await botHandler.init();
     }
     
-    console.log('🔗 Manually setting webhook URL:', url);
-    const result = await botHandler.bot.setWebHook(url);
+    console.log('🔗 Manually setting webhook URL:', webhookUrl);
+    const result = await botHandler.bot.setWebHook(webhookUrl);
     console.log('✅ Webhook set successfully:', result);
+    
+    // Also get webhook info to verify
+    const webhookInfo = await botHandler.bot.getWebHookInfo();
+    console.log('📊 Webhook info:', webhookInfo);
     
     res.json({ 
       status: 'OK', 
       message: 'Webhook URL set successfully',
-      url: url,
+      url: webhookUrl,
       result: result,
+      webhookInfo: webhookInfo,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -248,6 +256,34 @@ app.post('/set-webhook', async (req, res) => {
     res.status(500).json({ 
       status: 'ERROR', 
       message: 'Failed to set webhook',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Get webhook info
+app.get('/webhook-info', async (req, res) => {
+  try {
+    if (!botHandler.isInitialized) {
+      return res.status(400).json({
+        status: 'ERROR',
+        message: 'Bot not initialized',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const webhookInfo = await botHandler.bot.getWebHookInfo();
+    res.json({
+      status: 'OK',
+      webhookInfo: webhookInfo,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Failed to get webhook info:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Failed to get webhook info',
       error: error.message,
       timestamp: new Date().toISOString()
     });
@@ -340,13 +376,23 @@ async function initializeBot() {
 // ---------- Initialize Everything ----------
 async function initialize() {
   try {
-    // In production (Vercel), skip full initialization to reduce cold start time
-    // Initialization will happen on first webhook call
     if (process.env.NODE_ENV === 'production') {
-      console.log('🔧 Production mode: Lazy initialization (will init on first request)');
-      // Don't wait for database or bot init - let them initialize on first request
-      // This makes cold starts much faster
-      console.log('✅ Server ready (fast cold start)');
+      console.log('🔧 Production mode: Initializing bot and setting webhook');
+      
+      // Initialize bot handler (needed to set webhook URL)
+      try {
+        await botHandler.init();
+        console.log('✅ Bot handler initialized');
+        
+        // Set webhook URL with Telegram (CRITICAL - Telegram needs this before sending webhooks)
+        await setupWebhook();
+        console.log('✅ Webhook URL set with Telegram');
+      } catch (botError) {
+        console.error('⚠️ Bot initialization failed (will retry on first webhook):', botError.message);
+        // Don't fail completely - let it retry on first webhook
+      }
+      
+      console.log('✅ Server ready');
     } else {
       // Local development: full initialization
       console.log('🔧 Connecting to database...');
@@ -355,7 +401,7 @@ async function initialize() {
       // Initialize bot handler
       await initializeBot();
       
-      // Set up webhook
+      // Set up webhook (for local, this starts polling)
       await setupWebhook();
       
       console.log('✅ All systems initialized successfully');
