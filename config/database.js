@@ -16,18 +16,6 @@ class Database {
             
             await mongoose.connect(process.env.MONGODB_URI, {
                 dbName: process.env.MONGODB_DB_NAME,
-                // Optimize for serverless: connection pooling
-                maxPoolSize: 5,
-                minPoolSize: 1,
-                serverSelectionTimeoutMS: 10000, // Increased timeout for Vercel cold starts
-                socketTimeoutMS: 45000,
-                connectTimeoutMS: 10000,
-                // Retry configuration for better resilience
-                retryWrites: true,
-                w: 'majority',
-                // Better handling for serverless environments
-                bufferCommands: false,
-                bufferMaxEntries: 0,
             });
 
             this.isConnected = true;
