@@ -1,3 +1,8 @@
+// ============================================
+// FIXED VERSION FOR YOUR OTHER BOT PROJECT
+// ============================================
+// This shows the key changes needed to fix cold start issues
+
 const express = require('express');
 const TelegramBotHandler = require('./bot/TelegramBotHandler');
 const { loadTemplate } = require('./utils/templateLoader');
@@ -10,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 // ---------- Config ----------
 const {
   MONGODB_URI,
-  MONGODB_DB_NAME = 'tweetbot', // Default database name
+  MONGODB_DB_NAME = 'tweetbot',
   TELEGRAM_BOT_TOKEN,
   X_CLIENT_ID,
   X_CLIENT_SECRET,
@@ -45,8 +50,53 @@ if (!DEEPSEEK_API_KEY) {
 // ---------- Initialize Bot Handler ----------
 const botHandler = new TelegramBotHandler();
 
-// ---------- MongoDB ----------
-// Database connection will be handled by the Database class
+// ============================================
+// KEY FIX: Initialization Promise
+// ============================================
+// This ensures bot and database are initialized before processing webhooks
+let initializationPromise = null;
+
+async function ensureInitialized() {
+  // If already initialized, return immediately
+  if (botHandler.isInitialized && database.getConnectionStatus()) {
+    return;
+  }
+
+  // If initialization is in progress, wait for it
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+
+  // Start new initialization
+  initializationPromise = (async () => {
+    try {
+      console.log('🔧 Cold start detected - initializing bot and database...');
+      
+      // Initialize database first
+      if (!database.getConnectionStatus()) {
+        console.log('📊 Connecting to database...');
+        await database.connect();
+        console.log('✅ Database connected');
+      }
+
+      // Initialize bot handler
+      if (!botHandler.isInitialized) {
+        console.log('🤖 Initializing bot handler...');
+        await botHandler.init();
+        console.log('✅ Bot handler initialized');
+      }
+
+      console.log('✅ Initialization complete');
+    } catch (error) {
+      console.error('❌ Initialization failed:', error);
+      // Reset promise so we can retry
+      initializationPromise = null;
+      throw error;
+    }
+  })();
+
+  return initializationPromise;
+}
 
 // ---------- Middleware ----------
 app.use(express.json());
@@ -58,49 +108,102 @@ app.get('/wengroLogo.jpg', (req, res) => {
   res.sendFile(__dirname + '/wengroLogo.jpg');
 });
 
-// Webhook endpoint for receiving Telegram updates
+// ============================================
+// KEY FIX: Webhook endpoint with proper initialization
+// ============================================
 app.post('/webhook', async (req, res) => {
   // Respond immediately to Telegram to prevent timeout
-  // This is crucial for Vercel cold starts
   res.status(200).json({ status: 'OK' });
   
-  // Process webhook update asynchronously (don't await)
+  // Process webhook update asynchronously AFTER ensuring initialization
   (async () => {
     try {
       console.log('📨 Webhook received');
-      console.log('📨 Bot initialized:', botHandler.isInitialized);
       
-      // Ensure database connection (non-blocking)
-      if (!database.getConnectionStatus()) {
-        try {
-          await database.connect();
-          console.log('✅ Database connected');
-        } catch (dbError) {
-          console.error('❌ Database connection failed:', dbError.message);
-        }
-      }
+      // CRITICAL: Ensure initialization completes before processing
+      await ensureInitialized();
       
-      // If bot handler is not initialized, try to initialize it
-      if (!botHandler.isInitialized) {
-        console.log('🔄 Bot handler not initialized, attempting to initialize...');
-        try {
-          await botHandler.init();
-          console.log('✅ Bot handler initialized successfully');
-        } catch (initError) {
-          console.error('❌ Failed to initialize bot handler:', initError);
-          console.error('❌ Init error stack:', initError.stack);
-          return;
-        }
-      }
-      
-      // Process the webhook update
+      // Now process the webhook update
       await botHandler.handleWebhookUpdate(req.body);
       console.log('✅ Webhook processed successfully');
     } catch (error) {
       console.error('❌ Error processing webhook:', error);
       console.error('❌ Error stack:', error.stack);
+      
+      // Try to send error message to user if possible
+      try {
+        if (botHandler.isInitialized && botHandler.bot && req.body?.message?.chat?.id) {
+          await botHandler.bot.sendMessage(
+            req.body.message.chat.id,
+            '⚠️ Bot is initializing. Please try again in a moment.'
+          );
+        }
+      } catch (sendError) {
+        console.error('❌ Failed to send error message:', sendError);
+      }
     }
   })();
+});
+
+// ============================================
+// KEY FIX: Health check that also initializes (warms up function)
+// ============================================
+app.get('/health', async (req, res) => {
+  try {
+    // This endpoint warms up the function and ensures initialization
+    await ensureInitialized();
+    
+    const dbStatus = database.getConnectionStatus() ? 'Connected' : 'Disconnected';
+    const dbStatusClass = database.getConnectionStatus() ? 'status-ok' : 'status-error';
+    
+    // Check if user wants HTML or JSON
+    const acceptsHtml = req.accepts('html');
+    
+    if (acceptsHtml) {
+      res.send(loadTemplate('health', {
+        DB_STATUS: dbStatus,
+        DB_STATUS_CLASS: dbStatusClass,
+        PORT: PORT,
+        TIMESTAMP: new Date().toLocaleString()
+      }));
+    } else {
+      res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        message: 'Twitter Bot server is running',
+        bot: botHandler.isInitialized ? 'Initialized' : 'Not Initialized',
+        database: dbStatus,
+        port: PORT,
+        uptime: process.uptime()
+      });
+    }
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Initialization failed',
+      error: error.message
+    });
+  }
+});
+
+// Root endpoint - also warms up the function
+app.get('/', async (req, res) => {
+  try {
+    await ensureInitialized();
+    res.json({
+      message: 'Twitter Bot API',
+      status: 'OK',
+      bot: botHandler.isInitialized ? 'Initialized' : 'Not Initialized',
+      database: database.getConnectionStatus() ? 'Connected' : 'Disconnected'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Initialization failed',
+      error: error.message
+    });
+  }
 });
 
 // OAuth callback endpoint
@@ -116,8 +219,7 @@ app.get('/auth/x/callback', async (req, res) => {
   }
   
   try {
-    // The bot handler will process this through the webhook
-    // Show the actual callback URL with parameters that the user needs to send back
+    await ensureInitialized();
     const actualCallbackUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
     console.log('📱 Displaying callback URL to user:', actualCallbackUrl);
     res.send(loadTemplate('authSuccess', { CALLBACK_URL: actualCallbackUrl }));
@@ -128,42 +230,51 @@ app.get('/auth/x/callback', async (req, res) => {
 });
 
 // Simple test endpoint
-app.get('/test', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Server is responding',
-    timestamp: new Date().toISOString(),
-    bot: botHandler.isInitialized ? 'Initialized' : 'Not Initialized',
-    database: database.getConnectionStatus() ? 'Connected' : 'Disconnected'
-  });
+app.get('/test', async (req, res) => {
+  try {
+    await ensureInitialized();
+    res.json({ 
+      status: 'OK', 
+      message: 'Server is responding',
+      timestamp: new Date().toISOString(),
+      bot: botHandler.isInitialized ? 'Initialized' : 'Not Initialized',
+      database: database.getConnectionStatus() ? 'Connected' : 'Disconnected'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Initialization failed',
+      error: error.message
+    });
+  }
 });
 
 // Test webhook endpoint
-app.post('/test-webhook', (req, res) => {
-  console.log('🧪 Test webhook endpoint called');
-  console.log('🧪 Request body:', JSON.stringify(req.body, null, 2));
-  res.json({ 
-    status: 'OK', 
-    message: 'Test webhook endpoint working',
-    timestamp: new Date().toISOString(),
-    received: req.body
-  });
+app.post('/test-webhook', async (req, res) => {
+  try {
+    await ensureInitialized();
+    console.log('🧪 Test webhook endpoint called');
+    console.log('🧪 Request body:', JSON.stringify(req.body, null, 2));
+    res.json({ 
+      status: 'OK', 
+      message: 'Test webhook endpoint working',
+      timestamp: new Date().toISOString(),
+      received: req.body
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      message: 'Initialization failed',
+      error: error.message
+    });
+  }
 });
 
 // Initialize bot endpoint
 app.post('/init-bot', async (req, res) => {
   try {
     console.log('🔄 Manual bot initialization requested');
-    if (botHandler.isInitialized) {
-      return res.json({ 
-        status: 'OK', 
-        message: 'Bot already initialized',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    await botHandler.init();
-    console.log('✅ Bot initialized successfully via manual request');
+    await ensureInitialized();
     res.json({ 
       status: 'OK', 
       message: 'Bot initialized successfully',
@@ -184,8 +295,8 @@ app.post('/init-bot', async (req, res) => {
 app.post('/test-bot', async (req, res) => {
   try {
     console.log('🧪 Testing bot with fake message');
+    await ensureInitialized();
     
-    // Create a fake message
     const fakeUpdate = {
       message: {
         message_id: 123,
@@ -226,20 +337,14 @@ app.post('/test-bot', async (req, res) => {
 // Set webhook URL manually
 app.post('/set-webhook', async (req, res) => {
   try {
+    await ensureInitialized();
     const { url } = req.body;
     const webhookUrl = url || 'https://the-tweater-theta.vercel.app/webhook';
-    
-    // Ensure bot is initialized
-    if (!botHandler.isInitialized) {
-      console.log('🔄 Initializing bot before setting webhook...');
-      await botHandler.init();
-    }
     
     console.log('🔗 Manually setting webhook URL:', webhookUrl);
     const result = await botHandler.bot.setWebHook(webhookUrl);
     console.log('✅ Webhook set successfully:', result);
     
-    // Also get webhook info to verify
     const webhookInfo = await botHandler.bot.getWebHookInfo();
     console.log('📊 Webhook info:', webhookInfo);
     
@@ -265,6 +370,8 @@ app.post('/set-webhook', async (req, res) => {
 // Get webhook info
 app.get('/webhook-info', async (req, res) => {
   try {
+    await ensureInitialized();
+    
     if (!botHandler.isInitialized) {
       return res.status(400).json({
         status: 'ERROR',
@@ -290,39 +397,9 @@ app.get('/webhook-info', async (req, res) => {
   }
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  // Check if user wants HTML or JSON
-  const acceptsHtml = req.accepts('html');
-  
-  if (acceptsHtml) {
-    // Return stylized HTML page using template
-    const dbStatus = database.getConnectionStatus() ? 'Connected' : 'Disconnected';
-    const dbStatusClass = database.getConnectionStatus() ? 'status-ok' : 'status-error';
-    
-    res.send(loadTemplate('health', {
-      DB_STATUS: dbStatus,
-      DB_STATUS_CLASS: dbStatusClass,
-      PORT: PORT,
-      TIMESTAMP: new Date().toLocaleString()
-    }));
-  } else {
-    // Return JSON for API calls
-    res.json({ 
-      status: 'OK', 
-      timestamp: new Date().toISOString(),
-      message: 'Twitter Bot server is running',
-      bot: 'Active',
-      database: database.getConnectionStatus() ? 'Connected' : 'Disconnected',
-      port: PORT,
-      uptime: process.uptime()
-    });
-  }
-});
-
 // Favicon route
 app.get('/favicon.ico', (req, res) => {
-  res.status(204); // No content for favicon
+  res.status(204);
 });
 
 // Custom 404 page
@@ -333,107 +410,43 @@ app.use('*', (req, res) => {
 // Export the app for Vercel
 module.exports = app;
 
-// ---------- Webhook Setup ----------
-async function setupWebhook() {
-  try {
-    // Only set webhook in production (Vercel)
-    if (process.env.NODE_ENV === 'production') {
-      // Use the correct fixed webhook URL
-      const webhookUrl = 'https://the-tweater-theta.vercel.app/webhook';
-      
-      console.log('🔗 Setting webhook URL for production:', webhookUrl);
-      
-      // Use the bot instance from the handler to set webhook
-      const result = await botHandler.bot.setWebHook(webhookUrl);
-      console.log('✅ Webhook set successfully:', result);
-    } else {
-      // For local development, use polling
-      console.log('🔄 Using polling mode for local development');
-      botHandler.bot.startPolling();
-    }
-  } catch (error) {
-    console.error('❌ Failed to set webhook:', error);
-    console.error('❌ Error details:', error.message);
-    
-    // Fallback to polling
-    console.log('🔄 Falling back to polling mode');
-    botHandler.bot.startPolling();
-  }
-}
+// ============================================
+// KEY FIX: Simplified initialization for production
+// ============================================
+// For Vercel, we don't initialize at module load
+// Instead, we initialize on first request (via ensureInitialized)
+// This is handled by the ensureInitialized() function above
 
-// ---------- Initialize Bot Handler First ----------
-async function initializeBot() {
-  try {
-    console.log('🔧 Initializing bot handler...');
-    await botHandler.init();
-    console.log('✅ Bot handler initialized successfully');
-  } catch (error) {
-    console.error('❌ Failed to initialize bot handler:', error);
-    process.exit(1);
-  }
-}
-
-// ---------- Initialize Everything ----------
-async function initialize() {
-  try {
-    if (process.env.NODE_ENV === 'production') {
-      console.log('🔧 Production mode: Initializing bot and setting webhook');
-      
-      // Initialize bot handler (needed to set webhook URL)
-      try {
-        await botHandler.init();
-        console.log('✅ Bot handler initialized');
-        
-        // Set webhook URL with Telegram (CRITICAL - Telegram needs this before sending webhooks)
-        await setupWebhook();
-        console.log('✅ Webhook URL set with Telegram');
-      } catch (botError) {
-        console.error('⚠️ Bot initialization failed (will retry on first webhook):', botError.message);
-        // Don't fail completely - let it retry on first webhook
-      }
-      
-      console.log('✅ Server ready');
-    } else {
-      // Local development: full initialization
-      console.log('🔧 Connecting to database...');
+// For local development, initialize everything
+if (process.env.NODE_ENV !== 'production') {
+  async function initialize() {
+    try {
+      console.log('🔧 Local development: Initializing bot and database...');
       await database.connect();
-      
-      // Initialize bot handler
-      await initializeBot();
-      
-      // Set up webhook (for local, this starts polling)
-      await setupWebhook();
-      
+      await botHandler.init();
       console.log('✅ All systems initialized successfully');
-    }
-  } catch (error) {
-    console.error('❌ Failed to initialize:', error);
-    // Don't exit in production (Vercel) - let the function continue
-    if (process.env.NODE_ENV !== 'production') {
+    } catch (error) {
+      console.error('❌ Failed to initialize:', error);
       process.exit(1);
     }
   }
-}
 
-// Initialize everything
-initialize();
+  initialize();
 
-// For local development, start the server
-if (process.env.NODE_ENV !== 'production') {
-app.listen(PORT, () => {
-  console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
-  console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
-  console.log('📱 Bot commands:');
-  console.log('   /start - Welcome message');
-  console.log('   /connect - Connect Twitter account');
-  console.log('   /post <text> - Post tweet');
-  console.log('   /state - Check connection status');
-  console.log('   /disconnect - Disconnect account');
-  console.log('   /help - Show help');
-  console.log('   /test - Test if bot is working');
-  console.log('🤖 AI Content Creator: Send any message for content creation help');
-  console.log('');
-});
+  app.listen(PORT, () => {
+    console.log(`🚀 Twitter Bot with AI Content Creator server running on http://localhost:${PORT}`);
+    console.log(`🔗 Callback URL: http://localhost:${PORT}/auth/x/callback`);
+    console.log('📱 Bot commands:');
+    console.log('   /start - Welcome message');
+    console.log('   /connect - Connect Twitter account');
+    console.log('   /post <text> - Post tweet');
+    console.log('   /state - Check connection status');
+    console.log('   /disconnect - Disconnect account');
+    console.log('   /help - Show help');
+    console.log('   /test - Test if bot is working');
+    console.log('🤖 AI Content Creator: Send any message for content creation help');
+    console.log('');
+  });
 }
 
 // Graceful shutdown
@@ -441,11 +454,15 @@ process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down server...');
   try {
     if (process.env.NODE_ENV === 'production') {
-      await botHandler.bot.deleteWebHook();
-      console.log('✅ Webhook deleted');
+      if (botHandler.isInitialized && botHandler.bot) {
+        await botHandler.bot.deleteWebHook();
+        console.log('✅ Webhook deleted');
+      }
     } else {
-      botHandler.bot.stopPolling();
-      console.log('✅ Polling stopped');
+      if (botHandler.bot) {
+        botHandler.bot.stopPolling();
+        console.log('✅ Polling stopped');
+      }
     }
     await botHandler.stop();
     await database.disconnect();
@@ -459,11 +476,15 @@ process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down server...');
   try {
     if (process.env.NODE_ENV === 'production') {
-      await botHandler.bot.deleteWebHook();
-      console.log('✅ Webhook deleted');
+      if (botHandler.isInitialized && botHandler.bot) {
+        await botHandler.bot.deleteWebHook();
+        console.log('✅ Webhook deleted');
+      }
     } else {
-      botHandler.bot.stopPolling();
-      console.log('✅ Polling stopped');
+      if (botHandler.bot) {
+        botHandler.bot.stopPolling();
+        console.log('✅ Polling stopped');
+      }
     }
     await botHandler.stop();
     await database.disconnect();
@@ -472,3 +493,4 @@ process.on('SIGTERM', async () => {
   }
   process.exit(0);
 });
+
