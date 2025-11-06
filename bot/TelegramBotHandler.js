@@ -76,7 +76,42 @@ class TelegramBotHandler {
             console.log('=== WEBHOOK UPDATE RECEIVED ===');
             console.log('Update:', JSON.stringify(update, null, 2));
             
-            // Bot initialization is handled in the webhook endpoint
+            // CRITICAL: Ensure bot is initialized before processing
+            if (!this.isInitialized || !this.bot) {
+                console.error('❌ Bot not initialized in handleWebhookUpdate');
+                console.error('❌ Bot state:', {
+                    isInitialized: this.isInitialized,
+                    botExists: !!this.bot
+                });
+                
+                // Try to initialize if not already initialized
+                if (!this.isInitialized) {
+                    console.log('🔄 Attempting to initialize bot...');
+                    try {
+                        await this.init();
+                        console.log('✅ Bot initialized successfully');
+                    } catch (initError) {
+                        console.error('❌ Failed to initialize bot:', initError);
+                        
+                        // Try to send error message to user if we have chat info
+                        if (update.message?.chat?.id && this.bot) {
+                            try {
+                                await this.bot.sendMessage(
+                                    update.message.chat.id,
+                                    '⚠️ Bot is initializing. Please try again in a moment.'
+                                );
+                            } catch (sendError) {
+                                console.error('❌ Failed to send initialization error:', sendError);
+                            }
+                        }
+                        return;
+                    }
+                } else {
+                    // Bot marked as initialized but instance is null
+                    console.error('❌ Bot marked as initialized but bot instance is null');
+                    return;
+                }
+            }
             
             if (update.message && update.message.text) {
                 const msg = update.message;
@@ -97,6 +132,19 @@ class TelegramBotHandler {
             }
         } catch (error) {
             console.error('Error handling webhook update:', error);
+            console.error('Error stack:', error.stack);
+            
+            // Try to send error message to user if possible
+            try {
+                if (this.bot && update?.message?.chat?.id) {
+                    await this.bot.sendMessage(
+                        update.message.chat.id,
+                        '❌ An error occurred processing your message. Please try again.'
+                    );
+                }
+            } catch (sendError) {
+                console.error('❌ Failed to send error message to user:', sendError);
+            }
         }
     }
 
