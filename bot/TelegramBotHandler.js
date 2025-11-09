@@ -3,6 +3,8 @@ const { TwitterApi } = require('twitter-api-v2');
 const OpenAI = require('openai');
 const User = require('../models/User');
 const { loadTemplate } = require('../utils/templateLoader');
+const https = require('https');
+const path = require('path');
 require('dotenv').config();
 
 class TelegramBotHandler {
@@ -113,22 +115,30 @@ class TelegramBotHandler {
                 }
             }
             
-            if (update.message && update.message.text) {
+            if (update.message) {
                 const msg = update.message;
-                console.log('Processing message:', msg.text);
                 
-                // Handle commands
-                if (msg.text.startsWith('/')) {
-                    await this.handleCommand(msg);
-                } else if (msg.text.match(/https?:\/\/.*/)) {
-                    // Handle URL (Twitter callback)
-                    await this.handleUrlMessage(msg);
+                // Handle document messages (file uploads)
+                if (msg.document) {
+                    await this.handleDocumentMessage(msg);
+                } else if (msg.text) {
+                    console.log('Processing message:', msg.text);
+                    
+                    // Handle commands
+                    if (msg.text.startsWith('/')) {
+                        await this.handleCommand(msg);
+                    } else if (msg.text.match(/https?:\/\/.*/)) {
+                        // Handle URL (Twitter callback)
+                        await this.handleUrlMessage(msg);
+                    } else {
+                        // Handle AI chat
+                        await this.handleAIChat(msg);
+                    }
                 } else {
-                    // Handle AI chat
-                    await this.handleAIChat(msg);
+                    console.log('No text or document message in update');
                 }
             } else {
-                console.log('No text message in update');
+                console.log('No message in update');
             }
         } catch (error) {
             console.error('Error handling webhook update:', error);
@@ -207,10 +217,11 @@ class TelegramBotHandler {
                                 `*AI Tweet Generator:*\n` +
                                 `💬 Send me any long-form text and I'll create 3-4 engaging tweets for you!\n` +
                                 `   • Paste your article, blog post, or content\n` +
+                                `   • Or upload a \`.txt\` file with your content\n` +
                                 `   • I'll analyze it and generate multiple tweet options\n` +
                                 `   • Each tweet will be optimized for Twitter\n` +
                                 `   • Copy and use /post to publish any tweet\n\n` +
-                                `Start by using /connect to authorize your Twitter account, then send me your long-form content!`;
+                                `Start by using /connect to authorize your Twitter account, then send me your long-form content or upload a \`.txt\` file!`;
 
             const options = { parse_mode: 'Markdown' };
             if (msg.message_thread_id) {
@@ -466,6 +477,153 @@ class TelegramBotHandler {
                 await this.sendErrorMessage(chatId, 'Authentication failed. Please try again or use /connect to restart.', msg);
             }
         }
+    }
+
+    async handleDocumentMessage(msg) {
+        const chatId = msg?.chat?.id;
+        const telegramId = msg?.from?.id;
+        const document = msg?.document;
+        
+        if (!chatId || !telegramId || !document) {
+            console.error('Invalid message format in handleDocumentMessage:', msg);
+            return;
+        }
+        
+        try {
+            this.logUserMessage(msg, 'File upload');
+            
+            const fileName = document.file_name || 'unknown.txt';
+            const fileId = document.file_id;
+            const fileSize = document.file_size || 0;
+            
+            // Check file extension - only accept .txt files
+            const fileExtension = path.extname(fileName).toLowerCase();
+            if (fileExtension !== '.txt') {
+                await this.bot.sendMessage(chatId, 
+                    `❌ *Unsupported file type*\n\n` +
+                    `I only accept \`.txt\` files for long-form text input.\n` +
+                    `Your file: ${fileName}\n` +
+                    `Please send a \`.txt\` file instead.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
+                return;
+            }
+            
+            // Check file size (limit to 5MB for safety, Telegram allows up to 20MB)
+            const maxFileSize = 5 * 1024 * 1024; // 5MB in bytes
+            if (fileSize > maxFileSize) {
+                await this.bot.sendMessage(chatId, 
+                    `❌ *File too large*\n\n` +
+                    `File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB\n` +
+                    `Maximum allowed: 5 MB\n\n` +
+                    `Please send a smaller file.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
+                return;
+            }
+            
+            // Send processing message
+            await this.bot.sendMessage(chatId, 
+                `📄 *Processing file...*\n\n` +
+                `📎 *File:* ${fileName}\n` +
+                `📊 *Size:* ${(fileSize / 1024).toFixed(2)} KB\n\n` +
+                `Downloading and reading file content...`,
+                { 
+                    parse_mode: 'Markdown',
+                    message_thread_id: msg.message_thread_id 
+                }
+            );
+            
+            // Get file info from Telegram
+            const fileInfo = await this.bot.getFile(fileId);
+            const filePath = fileInfo.file_path;
+            
+            if (!filePath) {
+                throw new Error('Could not get file path from Telegram');
+            }
+            
+            // Download file from Telegram
+            const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`;
+            const fileContent = await this.downloadFile(fileUrl);
+            
+            if (!fileContent || fileContent.trim().length === 0) {
+                await this.bot.sendMessage(chatId, 
+                    `❌ *Empty file*\n\n` +
+                    `The file appears to be empty. Please send a file with content.`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
+                return;
+            }
+            
+            // Check content length (reasonable limit)
+            if (fileContent.length > 50000) { // ~50KB of text
+                await this.bot.sendMessage(chatId, 
+                    `⚠️ *File content too long*\n\n` +
+                    `The file contains ${fileContent.length} characters.\n` +
+                    `For best results, please keep files under 50,000 characters.\n\n` +
+                    `Processing anyway, but results may be truncated...`,
+                    { 
+                        parse_mode: 'Markdown',
+                        message_thread_id: msg.message_thread_id 
+                    }
+                );
+            }
+            
+            // Process the file content through AI chat
+            // Create a modified message object with the file content as text
+            const fileMsg = {
+                ...msg,
+                text: fileContent.substring(0, 50000) // Limit to 50K chars for safety
+            };
+            
+            await this.handleAIChat(fileMsg);
+            
+        } catch (error) {
+            console.error('Error handling document message:', error);
+            console.error('Error stack:', error.stack);
+            await this.sendErrorMessage(
+                chatId, 
+                'Failed to process the file. Please make sure it\'s a valid \`.txt\` file and try again.', 
+                msg
+            );
+        }
+    }
+
+    async downloadFile(url) {
+        return new Promise((resolve, reject) => {
+            https.get(url, (response) => {
+                if (response.statusCode !== 200) {
+                    reject(new Error(`Failed to download file: ${response.statusCode}`));
+                    return;
+                }
+                
+                let data = '';
+                response.setEncoding('utf8');
+                
+                response.on('data', (chunk) => {
+                    data += chunk;
+                });
+                
+                response.on('end', () => {
+                    resolve(data);
+                });
+                
+                response.on('error', (error) => {
+                    reject(error);
+                });
+            }).on('error', (error) => {
+                reject(error);
+            });
+        });
     }
 
     async handlePostCommand(msg, text) {
@@ -768,6 +926,7 @@ class TelegramBotHandler {
                              `*AI Tweet Generator:*\n` +
                              `💬 Send any long-form text to generate 3-4 tweets:\n` +
                              `   • Paste your article, blog post, or content\n` +
+                             `   • Or upload a \`.txt\` file (max 5MB)\n` +
                              `   • I'll analyze and create multiple tweet options\n` +
                              `   • Each tweet is optimized for Twitter (under 280 chars)\n` +
                              `   • Copy any tweet and use /post to publish it\n\n` +
@@ -775,7 +934,7 @@ class TelegramBotHandler {
                              `1. Use /connect to authorize Twitter\n` +
                              `2. Click the authorization link\n` +
                              `3. Copy the URL from your browser and send it back\n` +
-                             `4. Send me your long-form text to generate tweets\n` +
+                             `4. Send me your long-form text or upload a \`.txt\` file\n` +
                              `5. Copy any generated tweet and use /post to publish\n` +
                              `6. Check /state for connection info`;
 
